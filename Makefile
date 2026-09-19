@@ -1,5 +1,11 @@
-# Entry point for every check. CI runs `make verify` and nothing else, so a
-# green local run and a green pipeline cannot diverge.
+# Entry point for every check that can run without external services. CI runs
+# `make verify`, so a green local run and a green pipeline cannot diverge.
+#
+# One documented exception: `make verify-db` needs a Postgres server, which the
+# development environment does not have. Those tests skip locally with a stated
+# reason and run in a separate CI job against a service container. The exception
+# is named rather than folded into `verify`, because a `verify` that is green
+# locally for the wrong reason is worse than one that admits what it skipped.
 #
 # The determinism envelope (D9) is exported here rather than set inside Python:
 # BLAS and OpenMP read their thread counts when first imported, so a process that
@@ -21,7 +27,7 @@ RUN := $(UV) run
 IMAGE ?= trading-system:dev
 
 .DEFAULT_GOAL := verify
-.PHONY: verify install lint format typecheck banned models spec schemas codegen test test-fast \
+.PHONY: verify verify-db install lint format typecheck banned models spec schemas codegen test test-fast \
         image image-digest up down clean
 
 ## Full gate. Ordered cheapest-first so the fast checks fail fast.
@@ -66,6 +72,13 @@ codegen:
 
 test:
 	$(RUN) pytest
+
+## Everything in `verify`, plus the layers that need a Postgres server. Point
+## TRADING_TEST_DSN at a scratch database -- the schema is dropped and rebuilt.
+verify-db: verify
+	@test -n "$(TRADING_TEST_DSN)" || \
+	  { echo "set TRADING_TEST_DSN, e.g. postgresql://research:research@localhost:5432/trading_research"; exit 1; }
+	$(RUN) pytest -m postgres
 
 ## Everything except the layers that need a broker, a database or a daemon.
 test-fast:

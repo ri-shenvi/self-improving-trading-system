@@ -144,4 +144,5 @@ markers = [
     "statistical: null labels, random strategies, bootstrap calibration (§35)",
     "security: secrets, authorization, artifact signatures (§35)",
     "docker: requires a working Docker daemon",
+    "postgres: requires a Postgres server at TRADING_TEST_DSN",
 ]
