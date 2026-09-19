@@ -92,8 +92,32 @@ def discover(directory: Path = MIGRATIONS_DIR) -> tuple[Migration, ...]:
     return tuple(found[key] for key in sorted(found))
 
 
+#: Returns NULL when the ledger table does not exist yet.
+LEDGER_EXISTS_QUERY: Final = "SELECT to_regclass('schema_migration')"
+
+
+def ledger_exists(cursor: Cursor) -> bool:
+    """Whether the migration ledger has been created yet.
+
+    The bootstrap case: on an empty database the ledger does not exist, because
+    migration 0000 is what creates it. Querying it first would fail with
+    "relation does not exist" -- which is what happened the first time this ran
+    against a real Postgres, since a hand-written fake cursor had returned an
+    empty result instead of raising.
+
+    Checked with ``to_regclass`` rather than by catching the error, so a genuine
+    permissions or connection failure still surfaces instead of being read as
+    "no migrations applied" and silently re-running everything.
+    """
+    cursor.execute(LEDGER_EXISTS_QUERY)
+    rows = cursor.fetchall()
+    return bool(rows) and rows[0][0] is not None
+
+
 def applied_migrations(cursor: Cursor) -> dict[int, str]:
     """Return ``{version: sha256}`` for migrations already applied."""
+    if not ledger_exists(cursor):
+        return {}
     cursor.execute("SELECT version, sha256 FROM schema_migration ORDER BY version")
     # str() first: the DB-API row type is deliberately opaque here so the
     # protocol stays narrow enough to fake without a database.

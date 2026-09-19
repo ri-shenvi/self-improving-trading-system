@@ -24,21 +24,44 @@ from trading.memory.migrate import (
 pytestmark = pytest.mark.unit
 
 
-class FakeCursor:
-    """The slice of DB-API the applier uses, with no database behind it."""
+class UndefinedTable(RuntimeError):
+    """Stands in for psycopg's UndefinedTable, so the fake fails like Postgres."""
 
-    def __init__(self, applied: dict[int, str] | None = None) -> None:
+
+class FakeCursor:
+    """The slice of DB-API the applier uses, with no database behind it.
+
+    Deliberately strict about the bootstrap case. An earlier version returned an
+    empty result when asked for the ledger on a fresh database, so the offline
+    tests passed while the first real run failed with "relation
+    schema_migration does not exist". A fake that is more forgiving than the
+    thing it stands in for is worse than no fake.
+    """
+
+    def __init__(
+        self, applied: dict[int, str] | None = None, *, ledger: bool | None = None
+    ) -> None:
         self.applied = dict(applied or {})
+        # Ledger exists once migration 0 has run, unless a test says otherwise.
+        self.ledger = ledger if ledger is not None else 0 in self.applied
         self.executed: list[str] = []
         self._rows: list[tuple[object, ...]] = []
 
     def execute(self, query: str, params: tuple[object, ...] = (), /) -> None:
-        if query.startswith("SELECT version, sha256"):
+        if query.startswith("SELECT to_regclass"):
+            self._rows = [("schema_migration" if self.ledger else None,)]
+        elif query.startswith("SELECT version, sha256"):
+            if not self.ledger:
+                raise UndefinedTable('relation "schema_migration" does not exist')
             self._rows = [(v, h) for v, h in sorted(self.applied.items())]
         elif query.startswith("INSERT INTO schema_migration"):
+            if not self.ledger:
+                raise UndefinedTable('relation "schema_migration" does not exist')
             self.applied[int(str(params[0]))] = str(params[2])
         else:
             self.executed.append(query)
+            if "CREATE TABLE schema_migration" in query:
+                self.ledger = True
 
     def fetchall(self) -> list[tuple[object, ...]]:
         return self._rows
@@ -94,9 +117,29 @@ class TestImmutability:
             pending(cursor)
 
     def test_a_migration_applied_but_absent_is_fatal(self) -> None:
-        cursor = FakeCursor({99: "0" * 64})
+        # ledger=True: the database is not fresh, it has a record we cannot explain.
+        cursor = FakeCursor({99: "0" * 64}, ledger=True)
         with pytest.raises(MigrationError, match="not in the repository"):
             pending(cursor)
+
+
+class TestBootstrap:
+    """An empty database has no ledger, because migration 0000 creates it."""
+
+    def test_a_fresh_database_reports_nothing_applied(self) -> None:
+        assert pending(FakeCursor(ledger=False)) != ()
+
+    def test_applying_to_a_fresh_database_works(self) -> None:
+        cursor = FakeCursor(ledger=False)
+        applied = apply(cursor)
+        assert [m.version for m in applied] == [0, 1, 2]
+
+    def test_the_ledger_check_does_not_swallow_other_failures(self) -> None:
+        """to_regclass rather than catching the error: a permissions failure
+        must not be read as 'no migrations applied' and re-run everything."""
+        from trading.memory.migrate import LEDGER_EXISTS_QUERY
+
+        assert "to_regclass" in LEDGER_EXISTS_QUERY
 
 
 class TestApply:
