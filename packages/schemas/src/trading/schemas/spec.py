@@ -91,8 +91,10 @@ class FieldKind(StrEnum):
     #: int64 surrogate assigned by the instrument master, never reused (D6).
     INSTRUMENT_ID = "instrument_id"
 
-    #: Venue code. Dictionary-encoded: low cardinality repeated on every row.
-    EXCHANGE_CODE = "exchange_code"
+    #: A low-cardinality coded value from a versioned vocabulary, named by the
+    #: field's ``codeset``. Dictionary-encoded: a handful of distinct strings
+    #: repeated on every row of a billion-row table.
+    CODE = "code"
 
     #: Trade or quote condition codes. A list, because prints routinely carry
     #: several and condition filtering decides bar eligibility.
@@ -129,7 +131,7 @@ _ARROW_TYPES: Final[dict[FieldKind, pa.DataType]] = {
     FieldKind.NANO_DOLLARS: pa.int64(),
     FieldKind.SHARES: pa.int64(),
     FieldKind.INSTRUMENT_ID: pa.int64(),
-    FieldKind.EXCHANGE_CODE: pa.dictionary(pa.int8(), pa.string()),
+    FieldKind.CODE: pa.dictionary(pa.int8(), pa.string()),
     FieldKind.CONDITIONS: pa.list_(pa.dictionary(pa.int8(), pa.string())),
     FieldKind.TAPE: pa.dictionary(pa.int8(), pa.string()),
     FieldKind.SEQUENCE: pa.int64(),
@@ -148,7 +150,7 @@ _PYTHON_TYPES: Final[dict[FieldKind, str]] = {
     FieldKind.NANO_DOLLARS: "NanoDollars",
     FieldKind.SHARES: "Shares",
     FieldKind.INSTRUMENT_ID: "InstrumentId",
-    FieldKind.EXCHANGE_CODE: "str",
+    FieldKind.CODE: "str",
     FieldKind.CONDITIONS: "tuple[str, ...]",
     FieldKind.TAPE: "str",
     FieldKind.SEQUENCE: "int",
@@ -384,3 +386,57 @@ def time_fields(group: TimeGroup) -> tuple[FieldSpec, ...]:
     if group is TimeGroup.EFFECTIVE:
         return (*_TIME_FIELDS, _EFFECTIVE_FIELD, _REVISION_FIELD)
     return (*_TIME_FIELDS, _REVISION_FIELD)
+
+
+#: The ordering-key columns carried by every market event (§16).
+#:
+#: Stored as separate columns rather than one packed value: ``event_time``
+#: delta-encodes and ``source_rank`` run-length-encodes to almost nothing in
+#: parquet, while an opaque blob does neither, kills predicate pushdown on
+#: ``event_time``, and is unreadable from DuckDB.
+_ORDERING_FIELDS: Final[tuple[FieldSpec, ...]] = (
+    FieldSpec(
+        "source_rank",
+        FieldKind.COUNT,
+        doc="Dispatch priority among events sharing a timestamp. See "
+        "trading.schemas.ordering.SourceRank -- constraints before opportunities.",
+    ),
+    FieldSpec(
+        "vendor_sequence",
+        FieldKind.SEQUENCE,
+        doc="Vendor's sequence number, or -1 where the feed supplies none.",
+    ),
+    FieldSpec(
+        "venue_sequence",
+        FieldKind.SEQUENCE,
+        doc="Venue's sequence number, or -1 where absent.",
+    ),
+    FieldSpec(
+        "ingest_index",
+        FieldKind.SEQUENCE,
+        doc="Position within the raw partition, in the byte order of the raw "
+        "file. Never arrival order -- see ordering.assign_ingest_index.",
+    ),
+    FieldSpec(
+        "raw_partition_id",
+        FieldKind.TEXT,
+        doc="Provenance: which raw partition this row was normalized from. "
+        "Non-key, but ingest_index is only unique within one.",
+    ),
+    FieldSpec(
+        "event_time_source",
+        FieldKind.CODE,
+        codeset="event_time_source_v1",
+        doc="Whether event_time is the participant timestamp, the SIP "
+        "timestamp, or unknown. Recorded from the first row written because "
+        "D1's cost is unrepairable: if the vendor field turns out to be an "
+        "ingest time, knowledge_time is wrong everywhere and unrecoverable. "
+        "M7's quality gate refuses to promote a snapshot containing "
+        "'vendor_unknown'.",
+    ),
+)
+
+
+def ordering_fields() -> tuple[FieldSpec, ...]:
+    """Return the §16 ordering-key columns carried by every market event."""
+    return _ORDERING_FIELDS

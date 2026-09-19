@@ -28,7 +28,7 @@ _BY_KIND: dict[FieldKind, st.SearchStrategy[Any]] = {
     FieldKind.NANO_DOLLARS: st.integers(min_value=-(2**62), max_value=2**62),
     FieldKind.SHARES: st.integers(min_value=-(2**40), max_value=2**40),
     FieldKind.INSTRUMENT_ID: st.integers(min_value=1, max_value=2**40),
-    FieldKind.EXCHANGE_CODE: st.text(min_size=1, max_size=8),
+    FieldKind.CODE: st.text(min_size=1, max_size=8),
     FieldKind.CONDITIONS: st.lists(st.text(min_size=1, max_size=4), max_size=5),
     FieldKind.TAPE: st.sampled_from(["A", "B", "C"]),
     FieldKind.SEQUENCE: st.integers(min_value=-1, max_value=2**40),

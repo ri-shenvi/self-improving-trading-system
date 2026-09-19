@@ -26,10 +26,12 @@ import sys
 import trading.schemas  # noqa: F401  -- import for the side effect of registering contracts
 from trading.schemas.registry import (
     LOCK_PATH,
+    Break,
     FindingKind,
     Maturity,
     all_contracts,
     check,
+    load_lock,
     render_lock,
 )
 
@@ -78,11 +80,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    breaks = list(load_lock()["breaks"])
+    if frozen_changes:
+        breaks.append(Break(contracts=sorted(frozen_changes), reason=args.break_frozen))
+
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LOCK_PATH.write_text(render_lock(), encoding="utf-8")
+    LOCK_PATH.write_text(render_lock(breaks=breaks), encoding="utf-8")
     print(f"wrote {LOCK_PATH} ({len(all_contracts())} contract(s))")
-    if args.break_frozen:
-        print(f"frozen contracts changed, reason recorded: {args.break_frozen}")
+    if frozen_changes:
+        print(f"recorded break of {', '.join(sorted(frozen_changes))}: {args.break_frozen}")
     return 0
 
 

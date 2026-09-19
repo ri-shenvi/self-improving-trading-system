@@ -33,7 +33,7 @@ def toy(
         FieldSpec("price_nano", FieldKind.NANO_DOLLARS, unit="nanodollar"),
     ]
     if extra:
-        fields.append(FieldSpec("venue", FieldKind.EXCHANGE_CODE, codeset="exchange_v1"))
+        fields.append(FieldSpec("venue", FieldKind.CODE, codeset="exchange_v1"))
     return ContractSpec(
         name="toy.contract",
         version=version,
@@ -90,7 +90,9 @@ class TestDriftDetection:
 
     def test_unlocked_contract_is_reported(self, tmp_path: Path) -> None:
         path = tmp_path / "empty.json"
-        path.write_text(json.dumps(Lock(emitter_version=emitter_version(), contracts={})))
+        path.write_text(
+            json.dumps(Lock(emitter_version=emitter_version(), contracts={}, breaks=[]))
+        )
         (finding,) = check(path, (toy(),))
         assert "not in the lock" in finding.detail
 
@@ -99,6 +101,7 @@ class TestDriftDetection:
         path = tmp_path / "lock.json"
         body = Lock(
             emitter_version="stale",
+            breaks=[],
             contracts={
                 "toy.contract": LockEntry(
                     version=1,

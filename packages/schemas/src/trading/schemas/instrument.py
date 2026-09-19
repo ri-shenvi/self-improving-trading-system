@@ -44,13 +44,13 @@ INSTRUMENT = register(
             ),
             FieldSpec(
                 "primary_exchange",
-                FieldKind.EXCHANGE_CODE,
+                FieldKind.CODE,
                 codeset="exchange_v1",
                 doc="Listing venue (§7).",
             ),
             FieldSpec(
                 "security_type",
-                FieldKind.EXCHANGE_CODE,
+                FieldKind.CODE,
                 codeset="security_type_v1",
                 doc="Common stock, ETF, and so on (§7). v1 trades only the first two.",
             ),

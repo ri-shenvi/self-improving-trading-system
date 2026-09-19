@@ -1,8 +1,58 @@
 {
+  "breaks": [
+    {
+      "contracts": [
+        "reference.instrument"
+      ],
+      "reason": "FieldKind.EXCHANGE_CODE renamed to CODE: security_type and venue_coverage are coded values, not exchanges, and the vocabulary is what codeset names. M1 has not landed and no data exists in the old shape."
+    }
+  ],
   "contracts": {
+    "normalized.bar": {
+      "canonical": "contract=normalized.bar\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:source_rank:count:required:unit=:codeset=\nfield=006:vendor_sequence:sequence:required:unit=:codeset=\nfield=007:venue_sequence:sequence:required:unit=:codeset=\nfield=008:ingest_index:sequence:required:unit=:codeset=\nfield=009:raw_partition_id:text:required:unit=:codeset=\nfield=010:event_time_source:code:required:unit=:codeset=event_time_source_v1\nfield=011:instrument_id:instrument_id:required:unit=:codeset=\nfield=012:window_ns:sequence:required:unit=:codeset=\nfield=013:open_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=014:high_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=015:low_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=016:close_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=017:volume_shares:shares:required:unit=share:codeset=\nfield=018:vwap_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=019:trade_count:count:required:unit=:codeset=\nfield=020:is_complete:bool:required:unit=:codeset=\n",
+      "hash": "e60726ec66eb2c9b54017a2626c60363334de0f8d552a0cd4ee7522c073b48af",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "normalized.quote": {
+      "canonical": "contract=normalized.quote\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:source_rank:count:required:unit=:codeset=\nfield=006:vendor_sequence:sequence:required:unit=:codeset=\nfield=007:venue_sequence:sequence:required:unit=:codeset=\nfield=008:ingest_index:sequence:required:unit=:codeset=\nfield=009:raw_partition_id:text:required:unit=:codeset=\nfield=010:event_time_source:code:required:unit=:codeset=event_time_source_v1\nfield=011:instrument_id:instrument_id:required:unit=:codeset=\nfield=012:bid_price_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=013:bid_size_shares:shares:required:unit=share:codeset=\nfield=014:bid_exchange:code:required:unit=:codeset=exchange_v1\nfield=015:ask_price_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=016:ask_size_shares:shares:required:unit=share:codeset=\nfield=017:ask_exchange:code:required:unit=:codeset=exchange_v1\nfield=018:conditions:conditions:required:unit=:codeset=quote_condition_v1\nfield=019:tape:tape:required:unit=:codeset=tape_v1\nfield=020:venue_coverage:code:required:unit=:codeset=venue_coverage_v1\n",
+      "hash": "63b680e42c5b7f34d10601445a78baaea980a5a71dc8e3c44f554cd47d52cf3a",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "normalized.trade": {
+      "canonical": "contract=normalized.trade\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:source_rank:count:required:unit=:codeset=\nfield=006:vendor_sequence:sequence:required:unit=:codeset=\nfield=007:venue_sequence:sequence:required:unit=:codeset=\nfield=008:ingest_index:sequence:required:unit=:codeset=\nfield=009:raw_partition_id:text:required:unit=:codeset=\nfield=010:event_time_source:code:required:unit=:codeset=event_time_source_v1\nfield=011:instrument_id:instrument_id:required:unit=:codeset=\nfield=012:price_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=013:size_shares:shares:required:unit=share:codeset=\nfield=014:exchange:code:required:unit=:codeset=exchange_v1\nfield=015:conditions:conditions:required:unit=:codeset=trade_condition_v1\nfield=016:trade_id:text:required:unit=:codeset=\nfield=017:tape:tape:required:unit=:codeset=tape_v1\nfield=018:is_cancelled:bool:required:unit=:codeset=\n",
+      "hash": "b57e9772d6df2e577d3ec4e9e82dc746a607cf11be00089528c264298344f50e",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "normalized.trading_status": {
+      "canonical": "contract=normalized.trading_status\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:source_rank:count:required:unit=:codeset=\nfield=006:vendor_sequence:sequence:required:unit=:codeset=\nfield=007:venue_sequence:sequence:required:unit=:codeset=\nfield=008:ingest_index:sequence:required:unit=:codeset=\nfield=009:raw_partition_id:text:required:unit=:codeset=\nfield=010:event_time_source:code:required:unit=:codeset=event_time_source_v1\nfield=011:instrument_id:instrument_id:required:unit=:codeset=\nfield=012:status:code:required:unit=:codeset=trading_status_v1\nfield=013:reason:code:required:unit=:codeset=halt_reason_v1\nfield=014:resume_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=015:luld_upper_nano:nano_dollars:nullable:unit=nanodollar:codeset=\nfield=016:luld_lower_nano:nano_dollars:nullable:unit=nanodollar:codeset=\n",
+      "hash": "c8f0ad03267abff9301ed9f7dfa90caee64dbe8b1dd366cd8e187a517ad95fd0",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "reference.borrow": {
+      "canonical": "contract=reference.borrow\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:is_shortable:bool:required:unit=:codeset=\nfield=008:available_shares:shares:nullable:unit=share:codeset=\nfield=009:borrow_fee_annual_bps:ratio:required:unit=:codeset=\nfield=010:locate_state:code:required:unit=:codeset=locate_state_v1\nfield=011:rule_201_restricted:bool:required:unit=:codeset=\n",
+      "hash": "bc0225654397878cb753d4a706ac428f349ec10289f37980f76ba2286495f0b5",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "reference.calendar_session": {
+      "canonical": "contract=reference.calendar_session\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:session_date:date:required:unit=:codeset=\nfield=007:is_trading_day:bool:required:unit=:codeset=\nfield=008:regular_open_ns:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=009:regular_close_ns:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=010:is_early_close:bool:required:unit=:codeset=\nfield=011:opening_auction_ns:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=012:closing_auction_ns:timestamp_ns:nullable:unit=ns_utc:codeset=\n",
+      "hash": "758d997f84e10c82a85525c30b31cd359a5fd3d4cb2f13a004623bf1fef36f2c",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "reference.corporate_action": {
+      "canonical": "contract=reference.corporate_action\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:action_type:code:required:unit=:codeset=corporate_action_v1\nfield=008:announcement_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=009:split_numerator:count:nullable:unit=:codeset=\nfield=010:split_denominator:count:nullable:unit=:codeset=\nfield=011:cash_amount_nano:nano_dollars:nullable:unit=nanodollar:codeset=\nfield=012:new_ticker:text:nullable:unit=:codeset=\n",
+      "hash": "882fc9e9d911a92127c68afa9fdc01e8980642e9f0947f55a2410d3fc9812771",
+      "maturity": "frozen",
+      "version": 1
+    },
     "reference.instrument": {
-      "canonical": "contract=reference.instrument\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:primary_exchange:exchange_code:required:unit=:codeset=exchange_v1\nfield=008:security_type:exchange_code:required:unit=:codeset=security_type_v1\nfield=009:lot_size:count:required:unit=:codeset=\nfield=010:is_tradable:bool:required:unit=:codeset=\n",
-      "hash": "01e953d1aee4d3b11b58dbaa78062eb8b928ebc67d0451fa8fcd49b73912ca3e",
+      "canonical": "contract=reference.instrument\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:primary_exchange:code:required:unit=:codeset=exchange_v1\nfield=008:security_type:code:required:unit=:codeset=security_type_v1\nfield=009:lot_size:count:required:unit=:codeset=\nfield=010:is_tradable:bool:required:unit=:codeset=\n",
+      "hash": "67752b7c4157c2db5cdbc371a90d33a2ebdc903eb7b2c6955785598b2ffb065e",
       "maturity": "frozen",
       "version": 1
     },
@@ -13,5 +63,5 @@
       "version": 1
     }
   },
-  "emitter_version": "b3c8e043c494cb4ae7f384e63a98bdf2b0c1686e05e08754730890f82d818bcf"
+  "emitter_version": "179c8b5a9dabebe54aa7c094ad292ca41649f3551d22aa1ec90c7ab15d56ea3f"
 }

@@ -26,6 +26,7 @@ from trading.schemas.spec import ContractSpec, Maturity, emitter_version
 
 __all__ = [
     "LOCK_PATH",
+    "Break",
     "Finding",
     "FindingKind",
     "Lock",
@@ -54,11 +55,22 @@ class LockEntry(TypedDict):
     canonical: str
 
 
+class Break(TypedDict):
+    """A recorded instance of a frozen contract being changed."""
+
+    contracts: list[str]
+    reason: str
+
+
 class Lock(TypedDict):
     """The checked-in lock file."""
 
     emitter_version: str
     contracts: dict[str, LockEntry]
+    #: Append-only. Demanding a reason and then discarding it would make
+    #: --break-frozen a speed bump; keeping it here means the history of every
+    #: breaking change is readable without archaeology through the git log.
+    breaks: list[Break]
 
 
 _CONTRACTS: Final[dict[str, ContractSpec]] = {}
@@ -120,10 +132,14 @@ class Finding:
         return f"{self.contract} [{self.kind.value}]: {self.detail}"
 
 
-def lock_body(contracts: tuple[ContractSpec, ...] | None = None) -> Lock:
+def lock_body(
+    contracts: tuple[ContractSpec, ...] | None = None,
+    breaks: list[Break] | None = None,
+) -> Lock:
     """Render contracts as the lock file's content. Defaults to the registry."""
     specs = all_contracts() if contracts is None else contracts
     return Lock(
+        breaks=breaks or [],
         emitter_version=emitter_version(),
         contracts={
             spec.name: LockEntry(
@@ -137,14 +153,18 @@ def lock_body(contracts: tuple[ContractSpec, ...] | None = None) -> Lock:
     )
 
 
-def render_lock(contracts: tuple[ContractSpec, ...] | None = None) -> str:
-    return json.dumps(lock_body(contracts), indent=2, sort_keys=True) + "\n"
+def render_lock(
+    contracts: tuple[ContractSpec, ...] | None = None,
+    breaks: list[Break] | None = None,
+) -> str:
+    return json.dumps(lock_body(contracts, breaks), indent=2, sort_keys=True) + "\n"
 
 
 def load_lock(path: Path = LOCK_PATH) -> Lock:
     if not path.is_file():
-        return Lock(emitter_version="", contracts={})
+        return Lock(emitter_version="", contracts={}, breaks=[])
     loaded: Lock = json.loads(path.read_text(encoding="utf-8"))
+    loaded.setdefault("breaks", [])
     return loaded
 
 
