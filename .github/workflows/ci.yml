@@ -1,0 +1,56 @@
+# CI runs `make verify` and nothing else, so a green local run and a green
+# pipeline cannot diverge. Adding a check here without adding it to the Makefile
+# would make the pipeline unreproducible locally, which is the first step toward
+# a pipeline nobody trusts.
+
+name: verify
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The determinism envelope (D9). Declared at job scope so the variables are set
+# before any interpreter starts — BLAS and OpenMP freeze their thread counts on
+# first import, so a later assignment would be inert. The authoritative list is
+# trading.runtime.determinism.PINNED_ENV, and tests/unit/test_determinism_envelope_declarations.py
+# asserts this block, the Makefile and the Dockerfile declare exactly that set.
+env:
+  PYTHONHASHSEED: "0"
+  TZ: "UTC"
+  OMP_NUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+  NUMEXPR_NUM_THREADS: "1"
+  VECLIB_MAXIMUM_THREADS: "1"
+  POLARS_MAX_THREADS: "1"
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.17"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install Python
+        run: uv python install
+
+      # --frozen fails rather than re-resolving. A pipeline that quietly
+      # upgraded a transitive dependency would be testing an environment no
+      # experiment was ever run in.
+      - name: Sync workspace
+        run: uv sync --all-packages --frozen
+
+      - name: Verify
+        run: make verify

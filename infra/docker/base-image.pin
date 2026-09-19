@@ -1,0 +1,15 @@
+# The base image, pinned by content digest (D9).
+#
+# A tag is a moving target: `python:3.12-slim-bookworm` resolves to different
+# bytes week to week, so an experiment that records only the tag cannot be
+# rebuilt. The digest is what makes the environment fingerprint mean something.
+#
+# Re-pin deliberately, never automatically, and treat it as a dependency change:
+#
+#     docker pull python:3.12-slim-bookworm
+#     docker image inspect -f '{{index .RepoDigests 0}}' python:3.12-slim-bookworm
+#
+# Paste the result below, replacing the whole line. Re-pinning changes the
+# environment fingerprint of every subsequent experiment, which is correct —
+# results from before and after are not interchangeable.
+python:3.12-slim-bookworm@sha256:PIN-REQUIRED

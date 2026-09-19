@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+.env
+.coverage
+htmlcov/
+
+# Local research artifacts — never committed; snapshots are content-addressed
+# and rebuilt from their manifests (D10).
+storage/
+/artifacts/

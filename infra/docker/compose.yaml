@@ -1,0 +1,66 @@
+# Local research stack. Durable truth in Postgres, ephemeral state in Redis,
+# artifacts in MinIO — the D7 boundary, made physical so it is hard to blur.
+#
+# This stack is research-only. It has no broker credentials and no route to one;
+# paper and live accounts live in a separate stack with separate hosts,
+# databases and keys, because a configuration flag is not separation (§33).
+
+name: trading-research
+
+services:
+  postgres:
+    # Registry, family trial counts, holdout access log, release registry.
+    # The trial counter needs serializable allocation, which is why it is here
+    # and not in a file (D7).
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: research
+      POSTGRES_DB: trading_research
+      # Deterministic collation: index and ORDER BY results must not depend on
+      # the host locale.
+      LANG: C
+      LC_ALL: C
+    command: >
+      postgres -c timezone=UTC
+               -c log_timezone=UTC
+               -c default_transaction_isolation=serializable
+    ports: ["5432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research -d trading_research"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    # Short-lived state and locks only. Anything here must be rebuildable from
+    # Postgres; nothing is authoritative in both (D7).
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    # Content-addressed snapshots and experiment artifacts. Immutable: raw
+    # partitions are never overwritten, corrections are appended (§8).
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: research
+      MINIO_ROOT_PASSWORD: research-dev-only
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["minio-data:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  minio-data:
