@@ -8,6 +8,8 @@ way. These are the properties M5 will inherit wholesale when it defines the DSL.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from trading.schemas.canonical_json import (
@@ -80,45 +82,112 @@ class TestFloatsAreRejected:
             encode({"rate": 0.5})
 
 
+_ENTRY_FIELDS = frozenset(
+    {"path", "row_count", "file_sha256", "content_sha256", "contract", "contract_version"}
+)
+
+
+def _entry(**overrides: object) -> FileEntry:
+    base: dict[str, object] = {
+        "path": "normalized/trade/date=2026-09-19/part-000.parquet",
+        "row_count": 2,
+        "file_sha256": "a" * 64,
+        "content_sha256": "b" * 64,
+        "contract": "normalized.trade",
+        "contract_version": 1,
+    }
+    return FileEntry(**(base | overrides))  # type: ignore[arg-type]
+
+
+def _manifest(**overrides: object) -> SnapshotManifest:
+    """One-file manifest; overrides route to the entry or the manifest by name."""
+    entry = {k: v for k, v in overrides.items() if k in _ENTRY_FIELDS}
+    manifest = {k: v for k, v in overrides.items() if k not in _ENTRY_FIELDS}
+    base: dict[str, object] = {"calendar_version": "xnys_v1"}
+    return SnapshotManifest(files=(_entry(**entry),), **(base | manifest))  # type: ignore[arg-type]
+
+
 class TestDocuments:
-    def test_snapshot_id_is_the_hash_of_the_body(self) -> None:
-        manifest = SnapshotManifest(
-            files=(
-                FileEntry(
-                    path="normalized/trade/date=2026-09-19/part-000.parquet",
-                    row_count=2,
-                    file_sha256="a" * 64,
-                    content_sha256="b" * 64,
-                    contract="normalized.trade",
-                    contract_version=1,
-                ),
-            ),
-            calendar_version="xnys_v1",
+    def test_snapshot_id_is_not_the_full_body_hash(self) -> None:
+        """Identity and integrity answer different questions (divergence 11)."""
+        manifest = _manifest()
+        assert manifest.snapshot_id() != manifest.canonical_hash()
+
+    def test_file_sha256_alone_does_not_change_the_snapshot_id(self) -> None:
+        """A pyarrow upgrade moves file_sha256 without a single row changing.
+
+        If that moved snapshot_id, every experiment in the corpus would be
+        invalidated by a routine dependency bump, and §40's promise that a
+        result is reproducible from its experiment id would not hold.
+        """
+        assert (
+            _manifest(file_sha256="a" * 64).snapshot_id()
+            == _manifest(file_sha256="d" * 64).snapshot_id()
         )
-        assert manifest.snapshot_id() == manifest.canonical_hash()
-        assert len(manifest.snapshot_id()) == 64
 
-    def test_snapshot_id_follows_content_not_file_bytes(self) -> None:
-        """A pyarrow upgrade moves file_sha256; it must not move the snapshot id."""
+    def test_file_sha256_is_still_covered_by_the_integrity_hash(self) -> None:
+        """Excluding it from identity must not stop it detecting corruption."""
+        assert (
+            _manifest(file_sha256="a" * 64).canonical_hash()
+            != _manifest(file_sha256="d" * 64).canonical_hash()
+        )
 
-        def build(file_hash: str) -> SnapshotManifest:
-            return SnapshotManifest(
-                files=(
-                    FileEntry(
-                        path="p.parquet",
-                        row_count=1,
-                        file_sha256=file_hash,
-                        content_sha256="c" * 64,
-                        contract="normalized.trade",
-                        contract_version=1,
-                    ),
-                )
-            )
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("content_sha256", "0" * 64),
+            ("row_count", 99),
+            ("path", "other.parquet"),
+            ("contract", "normalized.quote"),
+            ("contract_version", 2),
+        ],
+    )
+    def test_changing_file_content_changes_the_snapshot_id(self, field: str, value: object) -> None:
+        """Everything that describes *what data this is* must move the identity."""
+        assert _manifest().snapshot_id() != _manifest(**{field: value}).snapshot_id()
 
-        # NOTE: file_sha256 is part of the manifest body today, so this asserts
-        # the current behaviour rather than the eventual one. M2 must exclude it
-        # from the identity calculation; this test is the reminder.
-        assert build("a" * 64).snapshot_id() != build("d" * 64).snapshot_id()
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "calendar_version",
+            "corporate_action_version",
+            "cost_model_id",
+            "data_quality_report_sha256",
+            "license_id",
+        ],
+    )
+    def test_changing_a_semantic_manifest_field_changes_the_snapshot_id(self, field: str) -> None:
+        """A different calendar or cost model is a different snapshot (§8)."""
+        assert _manifest().snapshot_id() != _manifest(**{field: "changed"}).snapshot_id()
+
+    def test_adding_a_file_changes_the_snapshot_id(self) -> None:
+        base = _manifest()
+        extended = SnapshotManifest(
+            files=(*base.files, _entry(path="second.parquet")),
+            calendar_version=base.calendar_version,
+        )
+        assert base.snapshot_id() != extended.snapshot_id()
+
+    def test_file_listing_order_does_not_change_the_snapshot_id(self) -> None:
+        """Listing order is how the manifest was assembled, not what the data is."""
+        first, second = _entry(path="a.parquet"), _entry(path="b.parquet")
+        forward = SnapshotManifest(files=(first, second))
+        reverse = SnapshotManifest(files=(second, first))
+        assert forward.snapshot_id() == reverse.snapshot_id()
+
+    def test_duplicate_paths_are_rejected(self) -> None:
+        """Two entries for one path leave the snapshot ambiguous."""
+        with pytest.raises(ValueError, match="duplicate paths"):
+            SnapshotManifest(files=(_entry(), _entry()))
+
+    def test_identity_body_excludes_file_sha256(self) -> None:
+        """Stated structurally, so the exclusion cannot be undone by accident."""
+        body = _manifest().identity_body()
+        assert "file_sha256" not in json.dumps(body)
+        assert "content_sha256" in json.dumps(body)
+
+    def test_snapshot_id_is_a_sha256(self) -> None:
+        assert len(_manifest().snapshot_id()) == 64
 
     def test_cost_model_rates_are_rationals(self) -> None:
         """A published fee schedule is exact; a float would destabilise the hash."""

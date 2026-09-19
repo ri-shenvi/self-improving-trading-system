@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from trading.schemas.canonical_json import document_hash
 
@@ -28,7 +28,12 @@ class _Document(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     def canonical_hash(self) -> str:
-        """Hash through the frozen canonical encoder."""
+        """Hash the document's full body through the frozen canonical encoder.
+
+        For a snapshot manifest this is the *integrity* hash, covering every
+        field including serialization details. Identity is a narrower question —
+        see :meth:`SnapshotManifest.snapshot_id`.
+        """
         return document_hash(self.model_dump(mode="json"))
 
 
@@ -40,13 +45,31 @@ class FileEntry(_Document):
     row_count: int
     """Rows written, from the writer's receipt."""
     file_sha256: str
-    """Integrity. Moves when the parquet writer's version moves."""
+    """Integrity only. Detects corruption, and moves whenever the parquet
+    writer's version moves, so it is deliberately excluded from
+    :meth:`identity`."""
     content_sha256: str
-    """Logical identity. Independent of writer version, so a pyarrow upgrade
-    does not invalidate a snapshot nobody touched."""
+    """Logical identity: the Arrow encoding of the data itself, independent of
+    writer version and of chunking."""
     contract: str
     """Which contract the file was written under."""
     contract_version: int
+
+    def identity(self) -> dict[str, Any]:
+        """The fields that define *what data this is*.
+
+        Everything here changes only when the underlying market data or its
+        interpretation changes. ``file_sha256`` is absent on purpose: it is a
+        property of how the bytes were serialized, not of what they mean, and a
+        parquet writer upgrade moves it without a single row changing.
+        """
+        return {
+            "path": self.path,
+            "row_count": self.row_count,
+            "content_sha256": self.content_sha256,
+            "contract": self.contract,
+            "contract_version": self.contract_version,
+        }
 
 
 class SnapshotManifest(_Document):
@@ -64,14 +87,54 @@ class SnapshotManifest(_Document):
     license_id: str = ""
     """Market-data entitlements govern storage and derived data (§34)."""
 
-    def snapshot_id(self) -> str:
-        """The snapshot's identity, which *is* the hash of this body (D10).
+    @model_validator(mode="after")
+    def _paths_are_unique(self) -> SnapshotManifest:
+        paths = [entry.path for entry in self.files]
+        duplicates = sorted({path for path in paths if paths.count(path) > 1})
+        if duplicates:
+            raise ValueError(
+                f"duplicate paths in manifest: {duplicates}. Two entries for one "
+                "path make the snapshot ambiguous about which bytes an "
+                "experiment read."
+            )
+        return self
 
-        Derived from each file's ``content_sha256`` rather than ``file_sha256``,
-        so upgrading the parquet writer does not change the identity of data
-        that has not changed.
+    def identity_body(self) -> dict[str, Any]:
+        """The fields :meth:`snapshot_id` hashes.
+
+        Files are sorted by path, so two manifests listing the same files in a
+        different order describe the same snapshot and hash identically —
+        listing order is an artifact of how the manifest was assembled, not a
+        property of the data.
         """
-        return self.canonical_hash()
+        return {
+            "calendar_version": self.calendar_version,
+            "corporate_action_version": self.corporate_action_version,
+            "cost_model_id": self.cost_model_id,
+            "data_quality_report_sha256": self.data_quality_report_sha256,
+            "files": [entry.identity() for entry in sorted(self.files, key=lambda f: f.path)],
+            "license_id": self.license_id,
+        }
+
+    def snapshot_id(self) -> str:
+        """The snapshot's identity (D10).
+
+        Hashes :meth:`identity_body`, which carries each file's
+        ``content_sha256`` and every semantic manifest field, and deliberately
+        omits ``file_sha256``.
+
+        The reason is that snapshot identity must track the data an experiment
+        read, not the encoding it happened to be stored in. Parquet embeds its
+        writer's version in the file footer, so including ``file_sha256`` would
+        make a routine pyarrow upgrade change the identity of every snapshot in
+        the corpus — invalidating experiments nobody touched and breaking §40's
+        promise that a result can be reproduced from its experiment id.
+
+        Integrity is not lost by this: ``file_sha256`` is still recorded on every
+        entry and still hashed into :meth:`canonical_hash`, which is what detects
+        a corrupted or tampered file.
+        """
+        return document_hash(self.identity_body())
 
 
 class FeeComponent(_Document):

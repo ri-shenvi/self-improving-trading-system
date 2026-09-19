@@ -278,11 +278,28 @@ experiments nobody touched. `file_sha256` stays, because detecting corruption is
 its job. `content_sha256`, over the Arrow IPC encoding of the combined table,
 carries no writer version and is independent of chunking (both verified).
 
-**Known gap.** `SnapshotManifest` currently includes `file_sha256` in its body,
-so it still feeds `snapshot_id`. M2 must exclude it from the identity
-calculation. A test asserts today's behaviour and names the obligation, so the
-gap is recorded rather than discovered when a dependency bump invalidates the
-corpus.
+**How identity and integrity are separated.** `SnapshotManifest` has two hashes,
+because they answer different questions:
 
-**Status.** Writer implemented at M1 — `trading.schemas.io`. Manifest identity
-completes at M2.
+- `snapshot_id()` hashes `identity_body()`: each file's `path`, `row_count`,
+  `content_sha256`, `contract` and `contract_version`, plus every semantic
+  manifest field (calendar version, corporate-action version, cost model id,
+  data-quality report, licence). It answers *which data did this experiment
+  read*. Files are sorted by path, so listing order — an artifact of how the
+  manifest was assembled — does not affect it.
+- `canonical_hash()` hashes the full body, `file_sha256` included. It answers
+  *are these exact bytes intact*, and is what detects corruption or tampering.
+
+`file_sha256` is therefore still recorded and still checked; it simply does not
+define identity. Including it would mean a routine pyarrow upgrade changed the
+identity of every snapshot in the corpus without a single row changing,
+invalidating experiments nobody touched and breaking §40's promise that a result
+can be reproduced from its experiment id alone.
+
+A manifest also rejects duplicate paths: two entries for one path leave the
+snapshot ambiguous about which bytes were read.
+
+**Status.** Resolved. Writer implemented at M1 — `trading.schemas.io`; manifest
+identity implemented in `trading.schemas.documents.SnapshotManifest`, with tests
+asserting that `file_sha256` alone does not move `snapshot_id` while every
+content-bearing and semantic field does.
