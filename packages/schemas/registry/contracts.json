@@ -1,4 +1,17 @@
 {
-  "contracts": {},
+  "contracts": {
+    "reference.instrument": {
+      "canonical": "contract=reference.instrument\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:primary_exchange:exchange_code:required:unit=:codeset=exchange_v1\nfield=008:security_type:exchange_code:required:unit=:codeset=security_type_v1\nfield=009:lot_size:count:required:unit=:codeset=\nfield=010:is_tradable:bool:required:unit=:codeset=\n",
+      "hash": "01e953d1aee4d3b11b58dbaa78062eb8b928ebc67d0451fa8fcd49b73912ca3e",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "reference.ticker_history": {
+      "canonical": "contract=reference.ticker_history\nversion=1\nmaturity=frozen\ntime_group=effective\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:effective_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=005:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:ticker:text:required:unit=:codeset=\nfield=008:end_time:timestamp_ns:nullable:unit=ns_utc:codeset=\n",
+      "hash": "8965381cc982b58204081281fcbf34202f1cfeda995957953619dfb78d659116",
+      "maturity": "frozen",
+      "version": 1
+    }
+  },
   "emitter_version": "b3c8e043c494cb4ae7f384e63a98bdf2b0c1686e05e08754730890f82d818bcf"
 }

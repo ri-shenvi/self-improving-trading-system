@@ -18,6 +18,7 @@ from __future__ import annotations
 import difflib
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Final, TypedDict
 
@@ -26,6 +27,7 @@ from trading.schemas.spec import ContractSpec, Maturity, emitter_version
 __all__ = [
     "LOCK_PATH",
     "Finding",
+    "FindingKind",
     "Lock",
     "LockEntry",
     "Maturity",
@@ -86,15 +88,36 @@ def all_contracts() -> tuple[ContractSpec, ...]:
     return tuple(_CONTRACTS[name] for name in sorted(_CONTRACTS))
 
 
+class FindingKind(StrEnum):
+    """What kind of disagreement a finding reports.
+
+    The distinction matters at the CLI: adding a contract is safe, because no
+    bytes exist in the new shape yet. Changing a frozen one is not, and only
+    that case demands ``--break-frozen``.
+    """
+
+    #: The kind-to-Arrow mapping moved, so every contract may have changed.
+    EMITTER = "emitter"
+    #: Declared in code, absent from the lock. Safe: nothing is written yet.
+    ADDED = "added"
+    #: Shape changed at the same version. This is the one that needs a reason.
+    CHANGED = "changed"
+    #: Shape changed and the version was bumped. Needs recording, not defending.
+    BUMPED = "bumped"
+    #: In the lock, no longer declared. Orphans every file written under it.
+    REMOVED = "removed"
+
+
 @dataclass(frozen=True, slots=True)
 class Finding:
     """One disagreement between the declared contracts and the lock."""
 
     contract: str
+    kind: FindingKind
     detail: str
 
     def __str__(self) -> str:
-        return f"{self.contract}: {self.detail}"
+        return f"{self.contract} [{self.kind.value}]: {self.detail}"
 
 
 def lock_body(contracts: tuple[ContractSpec, ...] | None = None) -> Lock:
@@ -143,6 +166,7 @@ def check(
         findings.append(
             Finding(
                 "<emitter>",
+                FindingKind.EMITTER,
                 "the FieldKind-to-Arrow mapping changed, so every contract's bytes "
                 "may have changed even where no contract was edited. Review "
                 "trading.schemas.spec, then re-accept the whole registry.",
@@ -152,7 +176,13 @@ def check(
     for spec in specs:
         entry = locked.pop(spec.name, None)
         if entry is None:
-            findings.append(Finding(spec.name, "declared but not in the lock; run --accept"))
+            findings.append(
+                Finding(
+                    spec.name,
+                    FindingKind.ADDED,
+                    "declared but not in the lock; run --accept to record it",
+                )
+            )
             continue
 
         if entry["hash"] == spec.content_hash():
@@ -172,6 +202,7 @@ def check(
             findings.append(
                 Finding(
                     spec.name,
+                    FindingKind.CHANGED,
                     f"shape changed but version is still {spec.version}.\n{diff}\n"
                     + (
                         "This contract is FROZEN: files already written under "
@@ -187,6 +218,7 @@ def check(
             findings.append(
                 Finding(
                     spec.name,
+                    FindingKind.BUMPED,
                     f"version bumped {entry['version']} -> {spec.version}; "
                     f"re-accept to record it.\n{diff}",
                 )
@@ -195,6 +227,7 @@ def check(
     findings.extend(
         Finding(
             name,
+            FindingKind.REMOVED,
             "in the lock but no longer declared; removing a contract "
             "orphans every file written under it",
         )

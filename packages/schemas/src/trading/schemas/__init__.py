@@ -6,6 +6,7 @@ trading.schemas``. Contract modules are imported here for that side effect; add
 new ones to the list below or they will be absent from the lock and from codegen.
 """
 
+from trading.schemas import instrument as instrument
 from trading.schemas.identifiers import InstrumentId, RawPartitionId
 from trading.schemas.money import NanoDollars, RoundedMoney, Shares, dollars, narrow, shares
 from trading.schemas.registry import all_contracts, get, register

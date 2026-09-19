@@ -320,3 +320,67 @@ class ContractSpec:
 
     def content_hash(self) -> str:
         return hashlib.sha256(self.canonical_form().encode("utf-8")).hexdigest()
+
+
+#: The §6 timestamps, in the order they appear on every contract that carries them.
+#:
+#: ``event_time`` .. ``knowledge_time`` are required. ``revision_time`` is
+#: nullable because most records are never corrected, and a sentinel would make
+#: "no correction yet" indistinguishable from a correction at the epoch.
+#: ``effective_time`` appears only for :attr:`TimeGroup.EFFECTIVE`; see
+#: :class:`TimeGroup` for why it is absent rather than null elsewhere.
+_TIME_FIELDS: Final[tuple[FieldSpec, ...]] = (
+    FieldSpec(
+        "event_time",
+        FieldKind.TIMESTAMP_NS,
+        unit="ns_utc",
+        doc="Timestamp assigned by the originating venue or source (§6).",
+    ),
+    FieldSpec(
+        "receive_time",
+        FieldKind.TIMESTAMP_NS,
+        unit="ns_utc",
+        doc="When the gateway received the message (§6). Used for latency and "
+        "stale-feed detection.",
+    ),
+    FieldSpec(
+        "process_time",
+        FieldKind.TIMESTAMP_NS,
+        unit="ns_utc",
+        doc="When normalization completed (§6). Absent from raw records, which "
+        "have not been normalized yet.",
+    ),
+    FieldSpec(
+        "knowledge_time",
+        FieldKind.TIMESTAMP_NS,
+        unit="ns_utc",
+        doc="Earliest time the system could have known this value (§6). The "
+        "field point-in-time correctness rests on: every feature join is "
+        "bounded by it, and it is never copied from a vendor field (D1).",
+    ),
+)
+
+_EFFECTIVE_FIELD: Final = FieldSpec(
+    "effective_time",
+    FieldKind.TIMESTAMP_NS,
+    unit="ns_utc",
+    doc="When the record becomes economically effective (§6) -- a corporate "
+    "action's ex-date, a ticker assignment's start. Distinct from "
+    "knowledge_time, which is when we could first know of it.",
+)
+
+_REVISION_FIELD: Final = FieldSpec(
+    "revision_time",
+    FieldKind.TIMESTAMP_NS,
+    nullable=True,
+    unit="ns_utc",
+    doc="When a correction or restatement arrived (§6), or null if this record "
+    "has never been revised.",
+)
+
+
+def time_fields(group: TimeGroup) -> tuple[FieldSpec, ...]:
+    """Return the §6 timestamp fields for a contract in ``group``."""
+    if group is TimeGroup.EFFECTIVE:
+        return (*_TIME_FIELDS, _EFFECTIVE_FIELD, _REVISION_FIELD)
+    return (*_TIME_FIELDS, _REVISION_FIELD)

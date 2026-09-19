@@ -24,7 +24,14 @@ import argparse
 import sys
 
 import trading.schemas  # noqa: F401  -- import for the side effect of registering contracts
-from trading.schemas.registry import LOCK_PATH, Maturity, all_contracts, check, render_lock
+from trading.schemas.registry import (
+    LOCK_PATH,
+    FindingKind,
+    Maturity,
+    all_contracts,
+    check,
+    render_lock,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,10 +61,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    # Only a shape change to an already-locked frozen contract is a break.
+    # A newly declared contract has no bytes on disk yet, and a version bump is
+    # the documented way to change one.
+    frozen = {c.name for c in all_contracts() if c.maturity is Maturity.FROZEN}
     frozen_changes = [
-        f.contract
-        for f in findings
-        if any(c.name == f.contract and c.maturity is Maturity.FROZEN for c in all_contracts())
+        f.contract for f in findings if f.kind is FindingKind.CHANGED and f.contract in frozen
     ]
     if frozen_changes and not args.break_frozen:
         print(
