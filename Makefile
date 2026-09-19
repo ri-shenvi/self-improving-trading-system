@@ -21,11 +21,11 @@ RUN := $(UV) run
 IMAGE ?= trading-system:dev
 
 .DEFAULT_GOAL := verify
-.PHONY: verify install lint format typecheck banned models spec test test-fast \
+.PHONY: verify install lint format typecheck banned models spec schemas codegen test test-fast \
         image image-digest up down clean
 
 ## Full gate. Ordered cheapest-first so the fast checks fail fast.
-verify: lint typecheck banned models spec test
+verify: lint typecheck banned models spec schemas test
 
 install:
 	$(UV) sync --all-packages
@@ -52,6 +52,17 @@ models:
 ## The committed specification text must still match the document it came from.
 spec:
 	$(RUN) python tools/extract_spec.py --check
+
+## Contract shapes must match the checked-in lock, and the generated Pydantic
+## models must match the declarations they come from.
+schemas:
+	$(RUN) python tools/schema_registry.py --check
+	$(RUN) python tools/codegen.py --check
+
+## Regenerate the contract models after changing a declaration.
+codegen:
+	$(RUN) python tools/codegen.py
+	$(RUN) python tools/schema_registry.py --accept
 
 test:
 	$(RUN) pytest
