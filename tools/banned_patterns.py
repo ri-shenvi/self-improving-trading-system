@@ -10,6 +10,7 @@ TRD001  D3        No bare ``datetime`` annotations in library code.
 TRD002  D5        No ad-hoc joins in ``packages/features`` outside ``pit.py``.
 TRD003  D6        No joins keyed on ticker or symbol.
 TRD004  D9        No unseeded or module-level randomness.
+TRD007  D4        No parquet writes outside the sanctioned contract writer.
 ======  ========  ==============================================================
 
 Ruff covers the call-site half of D3 through its ``DTZ`` rules and the legacy
@@ -52,10 +53,16 @@ PIT_MODULE: Final = "pit.py"
 #: recorded experiment seed.
 SEEDS_MODULE: Final = "seeds.py"
 
+#: The one module permitted to write parquet: it validates every row against its
+#: contract first. Arrow itself will not catch a knowledge_time that is present
+#: and wrong, so a write that bypasses this seam bypasses D4 entirely.
+IO_MODULE: Final = "io.py"
+
 _JOIN_METHODS: Final = frozenset({"join", "join_asof", "merge", "merge_sorted"})
 _JOIN_KEY_ARGS: Final = frozenset({"on", "left_on", "right_on", "by", "by_left", "by_right"})
 _TICKER_KEYS: Final = frozenset({"symbol", "ticker", "sym"})
 _GENERATOR_FACTORIES: Final = frozenset({"default_rng", "Generator", "RandomState"})
+_PARQUET_WRITERS: Final = frozenset({"write_table", "write_dataset", "ParquetWriter"})
 
 _ALLOW_RE: Final = re.compile(r"#\s*allow:\s*(TRD\d{3})\s+(?P<reason>\S.*)$")
 
@@ -128,6 +135,7 @@ class _Checker(ast.NodeVisitor):
         self._in_features = "packages/features/src" in path.as_posix()
         self._is_pit = path.name == PIT_MODULE
         self._is_seeds = path.name == SEEDS_MODULE
+        self._is_io = path.name == IO_MODULE
 
     def _report(self, node: ast.AST, code: str, message: str) -> None:
         line = getattr(node, "lineno", 0)
@@ -199,6 +207,7 @@ class _Checker(ast.NodeVisitor):
         if isinstance(node.func, ast.Attribute):
             self._check_join(node, node.func)
             self._check_generator(node, node.func)
+            self._check_parquet_write(node, node.func)
         self._check_join_keys(node)
         self.generic_visit(node)
 
@@ -227,6 +236,19 @@ class _Checker(ast.NodeVisitor):
                         "key on instrument_id and resolve through ticker_history (D6).",
                     )
 
+    def _check_parquet_write(self, node: ast.Call, func: ast.Attribute) -> None:
+        if func.attr not in _PARQUET_WRITERS or self._is_io:
+            return
+        if not _is_parquet_module(func.value):
+            return
+        self._report(
+            node,
+            "TRD007",
+            f"'{func.attr}()' writes parquet outside trading.schemas.io: route it "
+            "through write_contract_table(), which validates the contract first. "
+            "Arrow does not notice a knowledge_time that is present and wrong (D4).",
+        )
+
     def _check_generator(self, node: ast.Call, func: ast.Attribute) -> None:
         if func.attr not in _GENERATOR_FACTORIES:
             return
@@ -241,6 +263,15 @@ class _Checker(ast.NodeVisitor):
             "trading.runtime.seeds: obtain one from SeedEnvelope.stream(name) so it "
             "descends from the recorded experiment seed (D9).",
         )
+
+
+def _is_parquet_module(node: ast.expr) -> bool:
+    """Match ``pq``, ``parquet`` or ``pyarrow.parquet`` as a call target."""
+    if isinstance(node, ast.Name):
+        return node.id in {"pq", "parquet"}
+    if isinstance(node, ast.Attribute) and node.attr == "parquet":
+        return isinstance(node.value, ast.Name) and node.value.id in {"pa", "pyarrow"}
+    return False
 
 
 def _is_numpy_random(node: ast.expr) -> bool:
