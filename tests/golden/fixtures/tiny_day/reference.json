@@ -1,0 +1,27 @@
+{
+  "calendar": {
+    "closing_auction_ns": 1789761600000000000,
+    "is_early_close": false,
+    "is_trading_day": true,
+    "opening_auction_ns": 1789738200000000000,
+    "regular_close_ns": 1789761600000000000,
+    "regular_open_ns": 1789738200000000000,
+    "session_date": "2026-09-18"
+  },
+  "instrument": {
+    "effective_time": "2020-01-01T00:00:00.000000000Z",
+    "instrument_id": 900001,
+    "is_tradable": true,
+    "lot_size": 100,
+    "primary_exchange": "XNAS",
+    "security_type": "common_stock"
+  },
+  "ticker_history": [
+    {
+      "effective_time": "2020-01-01T00:00:00.000000000Z",
+      "end_time": null,
+      "instrument_id": 900001,
+      "ticker": "ZZTEST"
+    }
+  ]
+}

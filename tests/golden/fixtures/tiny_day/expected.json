@@ -1,0 +1,32 @@
+{
+  "bar_count": 33,
+  "files": {
+    "normalized.bar": {
+      "content_sha256": "9e5270202844f832eb87fe52334d6b8cb0cf962734b79d91c67513af405fad16",
+      "row_count": 33
+    },
+    "normalized.quote": {
+      "content_sha256": "8a77e7d06c47228ecc9441c8da774f3b5d1d2912eef993320e5aef2dc0d2ae0a",
+      "row_count": 1000
+    },
+    "normalized.trade": {
+      "content_sha256": "254582ce619a30eda4d5800cabd9349f53b86c7503ada69d0a62fcc75aab42c9",
+      "row_count": 1001
+    }
+  },
+  "first_bar": {
+    "close_nano": 49840000000,
+    "event_time": 1789738200000000000,
+    "high_nano": 50030000000,
+    "is_complete": true,
+    "low_nano": 49820000000,
+    "open_nano": 50030000000,
+    "trade_count": 30,
+    "volume_shares": 15600,
+    "vwap_nano": 49935897435
+  },
+  "first_trade_event_time": 1789738202523646945,
+  "first_trade_knowledge_time": 1789738202523896945,
+  "snapshot_id": "e7a9c118a91a372ed5ac16aafb078d9e366e9b4de4d9d75aca470a91286d4cc4",
+  "trades_in_bars": 981
+}

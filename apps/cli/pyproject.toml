@@ -19,6 +19,9 @@ dependencies = [
     "typer>=0.12",
 ]
 
+[project.scripts]
+trading = "trading.cli.main:cli"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

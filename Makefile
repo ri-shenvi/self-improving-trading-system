@@ -27,11 +27,12 @@ RUN := $(UV) run
 IMAGE ?= trading-system:dev
 
 .DEFAULT_GOAL := verify
-.PHONY: verify verify-db install lint format typecheck banned models spec schemas codegen test test-fast \
+.PHONY: verify verify-db install lint format typecheck banned models spec schemas codegen \
+        fixture golden test test-fast \
         image image-digest up down clean
 
 ## Full gate. Ordered cheapest-first so the fast checks fail fast.
-verify: lint typecheck banned models spec schemas test
+verify: lint typecheck banned models spec schemas fixture test
 
 install:
 	$(UV) sync --all-packages
@@ -69,6 +70,18 @@ schemas:
 codegen:
 	$(RUN) python tools/codegen.py
 	$(RUN) python tools/schema_registry.py --accept
+
+## The golden fixture must match its generator, and the pipeline must still
+## produce the recorded values. A fixture that drifts is not a golden fixture.
+fixture:
+	$(RUN) python tools/build_fixture.py --check
+	$(RUN) python tools/build_golden.py --check
+
+## Regenerate the fixture and its expected values. Review the diff: every later
+## milestone regresses against them.
+golden:
+	$(RUN) python tools/build_fixture.py
+	$(RUN) python tools/build_golden.py
 
 test:
 	$(RUN) pytest

@@ -766,12 +766,14 @@ version = "0.0.0"
 source = { editable = "packages/market_data" }
 dependencies = [
     { name = "polars" },
+    { name = "pyarrow" },
     { name = "trading-schemas" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "polars", specifier = ">=1.9" },
+    { name = "pyarrow", specifier = ">=25,<26" },
     { name = "trading-schemas", editable = "packages/schemas" },
 ]
 
@@ -852,7 +854,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pyarrow", specifier = ">=17" },
+    { name = "pyarrow", specifier = ">=25,<26" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "trading-runtime", editable = "packages/runtime" },
 ]

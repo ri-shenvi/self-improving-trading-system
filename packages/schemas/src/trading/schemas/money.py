@@ -203,6 +203,21 @@ def round_credit(exact: Fraction, *, field: str = "credit") -> RoundedMoney:
     return _round_against_us(exact, away_from_zero=False, field=field)
 
 
+def round_statistic(exact: Fraction, *, field: str = "statistic") -> RoundedMoney:
+    """Round a descriptive statistic toward zero.
+
+    Deliberately *not* rounded against us, because there is no "us" side to a
+    statistic. A bar's VWAP describes what happened; it is not money anyone paid
+    or received, so biasing it would bias a feature rather than protect a fill.
+
+    The against-us rule binds where a derived value becomes an execution price --
+    an order's limit, a simulated mark. A caller turning a statistic into a price
+    applies :func:`round_cost` or :func:`round_credit` at that point, which is
+    where the direction is knowable.
+    """
+    return _round_against_us(exact, away_from_zero=False, field=field)
+
+
 def apply_rate(
     base: int, rate: Fraction, *, credit: bool = False, field: str = "rate"
 ) -> RoundedMoney:

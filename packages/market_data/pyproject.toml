@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "trading-schemas",
     "polars>=1.9",
+    "pyarrow>=25,<26",
 ]
 
 [build-system]
