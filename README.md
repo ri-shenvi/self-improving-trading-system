@@ -3,8 +3,9 @@
 A research-first platform for discovering, validating and cautiously deploying
 U.S. equity intraday trading strategies.
 
-**Status: M1 complete.** Foundations, the determinism envelope, and the frozen
-contract layer. There is no market data, no backtester and no strategy yet — see
+**Status: M2 complete.** Foundations, the determinism envelope, the frozen
+contract layer, and a normalization pipeline that turns raw vendor records into
+a content-addressed snapshot. There is no backtester and no strategy yet — see
 the milestone list in the implementation plan.
 
 ## What this is
@@ -37,7 +38,22 @@ make install    # uv sync --all-packages
 make verify     # lint, strict typecheck, banned patterns, contract lock, tests
 make verify-db  # the above, plus the layers needing a Postgres server
 make codegen    # regenerate contract models after changing a declaration
+make golden     # regenerate the fixture and its expected values
 make up         # local Postgres, Redis and MinIO
+```
+
+Build a snapshot from the committed fixture:
+
+```sh
+uv run trading snapshot build \
+  --raw tests/golden/fixtures/tiny_day/raw \
+  --reference tests/golden/fixtures/tiny_day/reference.json \
+  --out /tmp/snap \
+  --receive-time 2026-09-19T00:00:00.000000000Z \
+  --process-time 2026-09-19T00:05:00.000000000Z \
+  --as-of 2026-09-18T20:00:00.000000000Z \
+  --event-time-source sip --venue-coverage sip
+uv run trading snapshot verify --root /tmp/snap
 ```
 
 `make verify` is the gate for everything that runs without external services.
@@ -81,6 +97,23 @@ scale, and instruments are keyed on a permanent surrogate rather than a ticker.
 `trading.schemas.io.write_contract_table` is the only sanctioned way to write a
 contract file, because Arrow will not notice a `knowledge_time` that is present
 and wrong.
+
+## Snapshots
+
+A snapshot is the immutable set of data one experiment read. Its identity is the
+hash of what the data *is* — each file's content hash plus the semantic manifest
+fields — and deliberately excludes the parquet bytes, so upgrading a library does
+not invalidate results nobody touched. Integrity is a separate hash over the
+exact bytes, and `snapshot verify` checks it.
+
+`SnapshotReader` refuses to open any path the manifest does not list. Reaching
+outside a snapshot is how a backtest reads data that did not exist at its
+decision time, and it looks like ordinary file access at the call site, so the
+boundary is enforced rather than documented.
+
+Normalization takes its clock as an argument. A pipeline that stamped wall-clock
+times would produce different bytes every run, so the same raw bytes would not
+produce the same snapshot — which is the whole point of having one.
 
 Derived from the *Intraday Agentic Trading System Specification* v1.0
 (19 September 2026).
