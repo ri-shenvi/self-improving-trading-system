@@ -14,8 +14,14 @@
 --
 -- DIVERGENCE 7. §9 specifies TIMESTAMPTZ, which in Postgres is microsecond
 -- precision and would silently truncate the nanoseconds D3 makes authoritative
--- and the ordering key depends on. The *_ns BIGINT columns are authoritative;
--- event_time is a generated column for human queries only.
+-- and the ordering key depends on. The *_ns BIGINT columns are authoritative.
+--
+-- Readable timestamps come from the order_event_readable view below rather than
+-- from a generated column. A stored generated column must be IMMUTABLE, and
+-- timestamptz arithmetic is only STABLE -- its result depends on the TimeZone
+-- setting -- so Postgres rejects it outright: "generation expression is not
+-- immutable". A view has no such requirement, and keeping the rendering out of
+-- the table reinforces that the integers are the real values.
 
 CREATE TABLE order_event (
     event_id            UUID        PRIMARY KEY,
@@ -38,9 +44,6 @@ CREATE TABLE order_event (
     event_time_ns       BIGINT      NOT NULL,
     receive_time_ns     BIGINT      NOT NULL,
     knowledge_time_ns   BIGINT      NOT NULL,
-    event_time          TIMESTAMPTZ GENERATED ALWAYS AS (
-        TIMESTAMPTZ 'epoch' + (event_time_ns / 1000) * INTERVAL '1 microsecond'
-    ) STORED,
 
     strategy_version    TEXT        NOT NULL,
     risk_policy_version TEXT        NOT NULL,
@@ -67,3 +70,33 @@ CREATE UNIQUE INDEX order_event_sequence_uk
 -- wearing a constraint's clothes.
 CREATE INDEX order_event_order_lookup
     ON order_event (account_id, client_order_id, event_time_ns);
+
+-- Human-readable rendering of the nanosecond columns. Microsecond resolution,
+-- because that is all TIMESTAMPTZ holds -- the dropped nanoseconds are exactly
+-- why the integers remain authoritative. Never join or order on these columns:
+-- two events one nanosecond apart render identically here.
+CREATE VIEW order_event_readable AS
+SELECT
+    event_id,
+    account_id,
+    client_order_id,
+    broker_order_id,
+    broker_event_id,
+    execution_id,
+    broker_sequence,
+    event_type,
+    state,
+    risk_reason,
+    event_time_ns,
+    receive_time_ns,
+    knowledge_time_ns,
+    TIMESTAMPTZ 'epoch' + (event_time_ns / 1000) * INTERVAL '1 microsecond'
+        AS event_time,
+    TIMESTAMPTZ 'epoch' + (receive_time_ns / 1000) * INTERVAL '1 microsecond'
+        AS receive_time,
+    TIMESTAMPTZ 'epoch' + (knowledge_time_ns / 1000) * INTERVAL '1 microsecond'
+        AS knowledge_time,
+    strategy_version,
+    risk_policy_version,
+    payload
+FROM order_event;

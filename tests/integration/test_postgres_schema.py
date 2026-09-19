@@ -188,11 +188,28 @@ class TestDivergenceSeven:
             cur.execute("SELECT event_time_ns FROM order_event LIMIT 1")
             assert _one(cur)[0] == 1_789_824_600_123_456_789
 
-    def test_the_generated_column_is_populated(self, migrated: psycopg.Connection[Any]) -> None:
+    def test_the_readable_view_renders_timestamps(self, migrated: psycopg.Connection[Any]) -> None:
+        """Rendering lives in a view, because a stored generated column must be
+        IMMUTABLE and timestamptz arithmetic is only STABLE."""
         with migrated.cursor() as cur:
-            _event(cur)
-            cur.execute("SELECT event_time FROM order_event LIMIT 1")
-            assert _one(cur)[0] is not None
+            _event(cur, event_time_ns=1_789_824_600_123_456_789)
+            cur.execute("SELECT event_time_ns, event_time FROM order_event_readable LIMIT 1")
+            nanos, rendered = _one(cur)
+            assert nanos == 1_789_824_600_123_456_789
+            assert rendered is not None
+
+    def test_the_view_loses_nanoseconds_and_the_table_does_not(
+        self, migrated: psycopg.Connection[Any]
+    ) -> None:
+        """Why the integers stay authoritative: two events a nanosecond apart
+        render identically, so nothing may join or order on the view's columns."""
+        with migrated.cursor() as cur:
+            _event(cur, broker_event_id="a", event_time_ns=1_789_824_600_000_000_001)
+            _event(cur, broker_event_id="b", event_time_ns=1_789_824_600_000_000_002)
+            cur.execute("SELECT count(DISTINCT event_time) FROM order_event_readable")
+            assert _one(cur)[0] == 1
+            cur.execute("SELECT count(DISTINCT event_time_ns) FROM order_event")
+            assert _one(cur)[0] == 2
 
     def test_knowledge_before_event_is_rejected(self, migrated: psycopg.Connection[Any]) -> None:
         """D4 reaches Postgres: leakage is leakage wherever it is stored."""

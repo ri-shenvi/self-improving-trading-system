@@ -167,7 +167,8 @@ permanently meaningless column on billion-row tables.
 **Spec §9** types `event_time` and `receive_time` as `TIMESTAMPTZ`.
 
 **We store** `event_time_ns`, `receive_time_ns` and `knowledge_time_ns` as
-`BIGINT`, with `event_time` as a generated `TIMESTAMPTZ` column for human queries.
+`BIGINT`, and render readable timestamps through the `order_event_readable`
+**view**.
 
 **Why.** Postgres `TIMESTAMPTZ` is microsecond precision. It would silently
 truncate the nanoseconds that D3 makes authoritative and that the §16 ordering
@@ -176,7 +177,20 @@ timestamp still looks like a perfectly good timestamp. Two events that the
 ordering key distinguishes would become indistinguishable in the durable log,
 which is precisely where reconciliation needs them separate.
 
-**Status.** Implemented at M1 — `infra/migrations/0002_order_event.sql`.
+**Why a view and not a generated column.** The first attempt used
+`GENERATED ALWAYS AS (... ) STORED`, and Postgres rejected it: *generation
+expression is not immutable*. A stored generated column must be `IMMUTABLE`, and
+`timestamptz` arithmetic is only `STABLE` because its result depends on the
+session's `TimeZone`. A view carries no such requirement, and keeping the
+rendering outside the table reinforces the point that the integers are the real
+values.
+
+An integration test asserts the consequence directly: two events one nanosecond
+apart render as one distinct value in the view and two in the table. Nothing may
+join or order on the view's timestamp columns.
+
+**Status.** Implemented at M1, corrected during M2 once the migrations were
+first executed against a real Postgres — `infra/migrations/0002_order_event.sql`.
 
 ---
 

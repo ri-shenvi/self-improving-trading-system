@@ -191,7 +191,13 @@ class TestDivergencesAreInTheDDL:
         """Divergence 7: TIMESTAMPTZ is microsecond and would truncate."""
         sql = self.sql(2)
         assert "event_time_ns       BIGINT      NOT NULL" in sql
-        assert "GENERATED ALWAYS AS" in sql
+
+    def test_readable_timestamps_come_from_a_view(self) -> None:
+        """A stored generated column must be IMMUTABLE; timestamptz arithmetic
+        is only STABLE, so Postgres rejects it. A view has no such rule."""
+        sql = self.statements(self.sql(2))
+        assert "CREATE VIEW order_event_readable" in sql
+        assert "GENERATED ALWAYS AS" not in sql
 
     def test_knowledge_time_constraint_reaches_postgres(self) -> None:
         assert "knowledge_time_ns >= event_time_ns" in self.sql(2)
