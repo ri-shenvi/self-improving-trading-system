@@ -19,6 +19,11 @@ from trading.schemas.money import NanoDollars, Shares
 from trading.schemas.time import TimestampNs
 
 __all__ = [
+    "ExecutionAccountState",
+    "ExecutionFill",
+    "ExecutionOrderEvent",
+    "ExecutionOrderIntent",
+    "ExecutionPosition",
     "NormalizedBar",
     "NormalizedQuote",
     "NormalizedTrade",
@@ -29,6 +34,186 @@ __all__ = [
     "ReferenceInstrument",
     "ReferenceTickerHistory",
 ]
+
+
+class ExecutionAccountState(BaseModel):
+    """Account as of an instant. The broker is authoritative for these (§30).
+
+    Contract ``execution.account_state`` v1 (frozen).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_time: TimestampNs
+    """Timestamp assigned by the originating venue or source (§6)."""
+    receive_time: TimestampNs
+    """When the gateway received the message (§6). Used for latency and stale-feed detection."""
+    process_time: TimestampNs
+    """When normalization completed (§6). Absent from raw records, which have not been normalized yet."""
+    knowledge_time: TimestampNs
+    """Earliest time the system could have known this value (§6). The field point-in-time correctness rests on: every feature join is bounded by it, and it is never copied from a vendor field (D1)."""
+    revision_time: TimestampNs | None
+    """When a correction or restatement arrived (§6), or null if this record has never been revised."""
+    account_id: str
+    """Account. Paper and live never share one."""
+    cash_nano: NanoDollars
+    """Settled cash."""
+    equity_nano: NanoDollars
+    """Total equity."""
+    buying_power_nano: NanoDollars
+    """As reported by the broker. Never computed locally: §30 makes the broker authoritative, and the intraday margin regime in force is discovered at startup rather than assumed."""
+    gross_exposure_nano: NanoDollars
+    """Sum of absolute position notionals."""
+    net_exposure_nano: NanoDollars
+    """Signed sum of position notionals."""
+    operating_state: str
+    """Which §5 state produced this row, so a paper row can never be mistaken for a live one."""
+
+
+class ExecutionFill(BaseModel):
+    """One execution. PnL reconciles from these and nothing else (§18).
+
+    Contract ``execution.fill`` v1 (frozen).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_time: TimestampNs
+    """Timestamp assigned by the originating venue or source (§6)."""
+    receive_time: TimestampNs
+    """When the gateway received the message (§6). Used for latency and stale-feed detection."""
+    process_time: TimestampNs
+    """When normalization completed (§6). Absent from raw records, which have not been normalized yet."""
+    knowledge_time: TimestampNs
+    """Earliest time the system could have known this value (§6). The field point-in-time correctness rests on: every feature join is bounded by it, and it is never copied from a vendor field (D1)."""
+    revision_time: TimestampNs | None
+    """When a correction or restatement arrived (§6), or null if this record has never been revised."""
+    client_order_id: str
+    """Parent order."""
+    broker_exec_id: str
+    """Execution identifier."""
+    instrument_id: InstrumentId
+    """Instrument."""
+    side: str
+    """Buy or sell."""
+    quantity_shares: Shares
+    """Filled quantity."""
+    price_nano: NanoDollars
+    """Fill price."""
+    commission_nano: NanoDollars
+    """Broker commission. Each cost is a separate column, never one blended number, so §17's decomposition is recoverable."""
+    regulatory_fees_nano: NanoDollars
+    """Regulatory and exchange fees, rounded against us."""
+    arrival_price_nano: NanoDollars
+    """Reference price at submission, for implementation shortfall (§22)."""
+
+
+class ExecutionOrderEvent(BaseModel):
+    """Append-only order lifecycle log for a simulated run (§9, §30).
+
+    Contract ``execution.order_event`` v1 (frozen).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_time: TimestampNs
+    """Timestamp assigned by the originating venue or source (§6)."""
+    receive_time: TimestampNs
+    """When the gateway received the message (§6). Used for latency and stale-feed detection."""
+    process_time: TimestampNs
+    """When normalization completed (§6). Absent from raw records, which have not been normalized yet."""
+    knowledge_time: TimestampNs
+    """Earliest time the system could have known this value (§6). The field point-in-time correctness rests on: every feature join is bounded by it, and it is never copied from a vendor field (D1)."""
+    revision_time: TimestampNs | None
+    """When a correction or restatement arrived (§6), or null if this record has never been revised."""
+    client_order_id: str
+    """Idempotency key."""
+    broker_order_id: str | None
+    """Broker's identifier, once acknowledged."""
+    broker_exec_id: str | None
+    """Execution identifier for a fill. Part of the uniqueness key: without it two partial fills sharing a timestamp collide, which is divergence 1 from §9."""
+    event_type: str
+    """Event type."""
+    state: str
+    """Resulting state."""
+    risk_reason: str
+    """Reason-coded risk decision, persisted before any broker call (§25)."""
+    strategy_version: str
+    """Signed strategy version."""
+    risk_policy_version: str
+    """Signed risk policy version."""
+
+
+class ExecutionOrderIntent(BaseModel):
+    """What a strategy asked for, before risk saw it (§16).
+
+    Contract ``execution.order_intent`` v1 (frozen).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_time: TimestampNs
+    """Timestamp assigned by the originating venue or source (§6)."""
+    receive_time: TimestampNs
+    """When the gateway received the message (§6). Used for latency and stale-feed detection."""
+    process_time: TimestampNs
+    """When normalization completed (§6). Absent from raw records, which have not been normalized yet."""
+    knowledge_time: TimestampNs
+    """Earliest time the system could have known this value (§6). The field point-in-time correctness rests on: every feature join is bounded by it, and it is never copied from a vendor field (D1)."""
+    revision_time: TimestampNs | None
+    """When a correction or restatement arrived (§6), or null if this record has never been revised."""
+    client_order_id: str
+    """Derived deterministically from (strategy_version, instrument_id, decision_time, intent_hash), so a retry regenerates the same id rather than a second live order (§30)."""
+    instrument_id: InstrumentId
+    """Target instrument."""
+    side: str
+    """Buy or sell."""
+    quantity_shares: Shares
+    """Whole shares."""
+    limit_price_nano: NanoDollars | None
+    """Limit price, or null for a market order."""
+    order_type: str
+    """Order type."""
+    time_in_force: str
+    """Time in force."""
+    decision_time: TimestampNs
+    """When the strategy clock fired. The submission key is this plus decision latency, and no fill may use an event at or before it (§16)."""
+    strategy_version: str
+    """Signed strategy version."""
+    risk_policy_version: str
+    """Signed risk policy version."""
+
+
+class ExecutionPosition(BaseModel):
+    """Position as of an instant. Always equals the signed sum of fills (§40).
+
+    Contract ``execution.position`` v1 (frozen).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_time: TimestampNs
+    """Timestamp assigned by the originating venue or source (§6)."""
+    receive_time: TimestampNs
+    """When the gateway received the message (§6). Used for latency and stale-feed detection."""
+    process_time: TimestampNs
+    """When normalization completed (§6). Absent from raw records, which have not been normalized yet."""
+    knowledge_time: TimestampNs
+    """Earliest time the system could have known this value (§6). The field point-in-time correctness rests on: every feature join is bounded by it, and it is never copied from a vendor field (D1)."""
+    revision_time: TimestampNs | None
+    """When a correction or restatement arrived (§6), or null if this record has never been revised."""
+    instrument_id: InstrumentId
+    """Instrument."""
+    quantity_shares: Shares
+    """Signed. Negative is short, which v1 research does not produce (D14)."""
+    average_cost_nano: NanoDollars
+    """Average entry cost per share."""
+    mark_price_nano: NanoDollars
+    """Causal mark: the last price knowable at this row's knowledge_time, never a later one."""
+    realized_pnl_nano: NanoDollars
+    """Realized PnL. Marked separately from unrealized (§18)."""
+    unrealized_pnl_nano: NanoDollars
+    """Unrealized PnL at the causal mark."""
 
 
 class NormalizedBar(BaseModel):

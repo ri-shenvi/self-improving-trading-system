@@ -8,6 +8,36 @@
     }
   ],
   "contracts": {
+    "execution.account_state": {
+      "canonical": "contract=execution.account_state\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:account_id:text:required:unit=:codeset=\nfield=006:cash_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=007:equity_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=008:buying_power_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=009:gross_exposure_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=010:net_exposure_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=011:operating_state:code:required:unit=:codeset=operating_state_v1\n",
+      "hash": "1758fc18576116d03f04d04ac6601f3cbccc35ae1db34b6cc3538bb1c3a7947b",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "execution.fill": {
+      "canonical": "contract=execution.fill\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:client_order_id:text:required:unit=:codeset=\nfield=006:broker_exec_id:text:required:unit=:codeset=\nfield=007:instrument_id:instrument_id:required:unit=:codeset=\nfield=008:side:code:required:unit=:codeset=side_v1\nfield=009:quantity_shares:shares:required:unit=share:codeset=\nfield=010:price_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=011:commission_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=012:regulatory_fees_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=013:arrival_price_nano:nano_dollars:required:unit=nanodollar:codeset=\n",
+      "hash": "2c8122d00413a1b5f1dc17340ec1842654dbf103eed725e28ef03cf96d35a0c7",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "execution.order_event": {
+      "canonical": "contract=execution.order_event\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:client_order_id:text:required:unit=:codeset=\nfield=006:broker_order_id:text:nullable:unit=:codeset=\nfield=007:broker_exec_id:text:nullable:unit=:codeset=\nfield=008:event_type:code:required:unit=:codeset=order_event_v1\nfield=009:state:code:required:unit=:codeset=order_state_v1\nfield=010:risk_reason:code:required:unit=:codeset=risk_reason_v1\nfield=011:strategy_version:text:required:unit=:codeset=\nfield=012:risk_policy_version:text:required:unit=:codeset=\n",
+      "hash": "26fd86b28ca1d95e5f0f2b9b75990445a65fd27d50b53a22d685c17eabc8004c",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "execution.order_intent": {
+      "canonical": "contract=execution.order_intent\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:client_order_id:text:required:unit=:codeset=\nfield=006:instrument_id:instrument_id:required:unit=:codeset=\nfield=007:side:code:required:unit=:codeset=side_v1\nfield=008:quantity_shares:shares:required:unit=share:codeset=\nfield=009:limit_price_nano:nano_dollars:nullable:unit=nanodollar:codeset=\nfield=010:order_type:code:required:unit=:codeset=order_type_v1\nfield=011:time_in_force:code:required:unit=:codeset=tif_v1\nfield=012:decision_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=013:strategy_version:text:required:unit=:codeset=\nfield=014:risk_policy_version:text:required:unit=:codeset=\n",
+      "hash": "065740a920aacbf23d2ea060b3af426ee113e08856b62754e2fbea8322baaac9",
+      "maturity": "frozen",
+      "version": 1
+    },
+    "execution.position": {
+      "canonical": "contract=execution.position\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:instrument_id:instrument_id:required:unit=:codeset=\nfield=006:quantity_shares:shares:required:unit=share:codeset=\nfield=007:average_cost_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=008:mark_price_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=009:realized_pnl_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=010:unrealized_pnl_nano:nano_dollars:required:unit=nanodollar:codeset=\n",
+      "hash": "67ce85ee46749cbb2616f1f49599fcc5bfe210130c1043ffaedecefb69dfced5",
+      "maturity": "frozen",
+      "version": 1
+    },
     "normalized.bar": {
       "canonical": "contract=normalized.bar\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:source_rank:count:required:unit=:codeset=\nfield=006:vendor_sequence:sequence:required:unit=:codeset=\nfield=007:venue_sequence:sequence:required:unit=:codeset=\nfield=008:ingest_index:sequence:required:unit=:codeset=\nfield=009:raw_partition_id:text:required:unit=:codeset=\nfield=010:event_time_source:code:required:unit=:codeset=event_time_source_v1\nfield=011:instrument_id:instrument_id:required:unit=:codeset=\nfield=012:window_ns:sequence:required:unit=:codeset=\nfield=013:open_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=014:high_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=015:low_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=016:close_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=017:volume_shares:shares:required:unit=share:codeset=\nfield=018:vwap_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=019:trade_count:count:required:unit=:codeset=\nfield=020:is_complete:bool:required:unit=:codeset=\n",
       "hash": "e60726ec66eb2c9b54017a2626c60363334de0f8d552a0cd4ee7522c073b48af",
