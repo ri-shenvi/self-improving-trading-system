@@ -21,11 +21,11 @@ RUN := $(UV) run
 IMAGE ?= trading-system:dev
 
 .DEFAULT_GOAL := verify
-.PHONY: verify install lint format typecheck banned models test test-fast \
+.PHONY: verify install lint format typecheck banned models spec test test-fast \
         image image-digest up down clean
 
 ## Full gate. Ordered cheapest-first so the fast checks fail fast.
-verify: lint typecheck banned models test
+verify: lint typecheck banned models spec test
 
 install:
 	$(UV) sync --all-packages
@@ -48,6 +48,10 @@ banned:
 ## D3 — the runtime half: contract fields that admit naive timestamps.
 models:
 	$(RUN) python tools/model_audit.py
+
+## The committed specification text must still match the document it came from.
+spec:
+	$(RUN) python tools/extract_spec.py --check
 
 test:
 	$(RUN) pytest

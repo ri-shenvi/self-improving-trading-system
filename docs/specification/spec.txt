@@ -1,0 +1,630 @@
+[Title] Intraday Agentic Trading System Specification
+[Subtitle] A research first platform for discovering validating paper trading and cautiously deploying U S equity day trading strategies
+[Small] Figure 1  System boundary and control hierarchy
+--- TABLE ---
+Version | 1.0
+Date | 19 September 2026
+Primary market | U.S. listed equities during regular trading hours
+Initial deployment | Research and paper trading before any live capital
+--- END TABLE ---
+Important limitation  No system design can ensure positive PnL or eliminate loss. The objective is to maximize expected net risk adjusted PnL subject to hard risk limits and strong evidence requirements. Every strategy may fail when market structure regimes costs liquidity or behavior change.
+[Heading1] How to use this specification
+This document is an implementation blueprint, not a promise of profitability or a set of stock recommendations. It defines the system boundaries, data contracts, research process, strategy representation, backtest rules, validation gates, agent permissions, execution controls, observability, security, and staged release plan required to build a credible intraday research and trading platform.
+The core conclusion is simple: the LLM may propose and organize research, but deterministic systems must own data access, feature calculation, experiment execution, statistical evaluation, risk decisions, order generation, and broker communication. Raw backtest Sharpe is never a sufficient release criterion.
+[Heading2] Design assumptions
+•  Instrument scope  Common stocks and liquid ETFs listed on U.S. national exchanges. Options, futures, crypto, OTC securities, and overnight positions are outside version 1.
+•  Trading window  Regular session only, approximately 09:30 to 16:00 America New York, with a configurable no-entry window near the close. Pre-market and after-hours become separate later strategies because their liquidity and spread behavior differ.
+•  Latency target  Seconds to low hundreds of milliseconds, not colocation or high-frequency market making. The platform targets researchable intraday horizons from roughly one minute to several hours.
+•  Capital posture  Paper first, then a small canary account. No leverage requirement is assumed. Exposure is constrained by liquidity, intraday margin availability, drawdown budgets, and broker rules.
+•  Data resolution  Trades and quotes are retained when licensed and affordable; one-second or one-minute bars may power early models, but fill simulation must remain more conservative than the signal resolution.
+•  Broker posture  A broker adapter hides vendor details. The broker is treated as the authority on account state, buying power, short availability, order status, fees, and the intraday margin implementation in effect for that account.
+[Heading2] Contents
+--- TABLE ---
+Part | Coverage
+A | Product objective, architecture, responsibilities, and non-goals
+B | Market data, point-in-time correctness, storage, schemas, and features
+C | Alpha DSL, intraday strategy families, experiment design, and backtesting
+D | Anti-overfitting validation, statistical gates, portfolio construction, and risk
+E | Agents, research memory, live execution, monitoring, security, and compliance
+F | Testing, roadmap, acceptance criteria, APIs, example configuration, and sources
+--- END TABLE ---
+[Heading1] Executive specification
+[Heading2] The product
+Build an autonomous but bounded quantitative research system that can ingest point-in-time intraday data, generate falsifiable hypotheses, compile them into a constrained Alpha DSL, run deterministic simulations, attack apparent winners, remember all trials including failures, and graduate only robust candidates through paper and canary deployment. The system is a self-improving researcher, not a self-authorizing trader.
+[Heading2] Optimization target
+The system must optimize expected net PnL after spread, commissions, regulatory fees, borrow charges, latency slippage, market impact, and missed fills. It must penalize drawdown, tail loss, instability, turnover, complexity, concentration, exposure to known factors, correlation with deployed strategies, and the number of research trials. A suitable conceptual objective is:
+[CodeBlock] RobustScore = Expected_OOS_Net_PnL              - λ1 × Expected_Shortfall              - λ2 × Maximum_Drawdown              - λ3 × Turnover_and_Impact              - λ4 × Parameter_Instability              - λ5 × Complexity              - λ6 × Existing_Book_Correlation              - λ7 × Multiple_Testing_Penalty
+The score ranks research candidates. It does not estimate the probability of future profit and must never replace hard release gates.
+[Heading2] Non negotiable controls
+--- TABLE ---
+Control | Required behavior | Failure response
+Point in time data | Every record carries event time, knowledge time, receive time, source, version, and revision status. | Block experiment; quarantine affected partitions.
+Trial registry | Every variant, prompt, parameter sweep, and rejected run increments the strategy family trial count. | Invalidate multiple-testing statistics until reconstructed.
+Deterministic execution | Same dataset snapshot, code commit, seed, and config produce identical results. | Fail CI and stop releases.
+Net performance | All headline results include explicit costs and a stressed-cost view. | Candidate cannot advance.
+LLM separation | No language-model process holds broker credentials or an order-submission capability. | Security incident; revoke keys and freeze trading.
+Pre-trade risk | Every order passes price, size, buying-power, position, liquidity, short-locate, duplicate, session, and loss checks. | Reject order; alert with reason code.
+Kill switch | One authenticated action cancels open orders, prevents new ones, and optionally flattens within configured price guards. | Enter SAFE mode and reconcile.
+Broker reconciliation | Broker orders, executions, positions, cash, and buying power are authoritative. | Pause new orders until reconciled.
+--- END TABLE ---
+[Heading1] Part A  Product and architecture
+[Heading2] 1  Goals and non goals
+The platform exists to improve the quality and throughput of quantitative research while reducing the chance that apparent edge is caused by leakage, stale universes, optimistic fills, ignored costs, duplicated tests, or narrative bias. Profit is an outcome of genuine edge plus disciplined execution; it is not a software acceptance criterion that can be guaranteed before deployment.
+[Heading3] Functional goals
+•  Translate natural-language research ideas into a structured hypothesis with predicted mechanism, target universe, horizon, features, counterfactual, and falsification test.
+•  Compile approved hypotheses into an Alpha DSL rather than unrestricted strategy code.
+•  Replay the market event by event using only information available at each simulated decision time.
+•  Simulate order lifecycle, partial fills, cancel latency, halts, price bands, short availability, fees, spread, impact, and end-of-day liquidation.
+•  Apply walk-forward, purged and embargoed validation where labels overlap, regime tests, bootstraps, parameter perturbations, universe perturbations, factor attribution, and multiple-testing corrections.
+•  Retain immutable lineage from source data through features, signals, orders, fills, PnL, conclusions, and deployment decisions.
+•  Continuously compare simulated and realized slippage, fill rate, opportunity cost, exposure, and alpha decay.
+[Heading3] Explicit non goals
+•  Predicting individual stock movements from an LLM response or social-media narrative without a testable statistical specification.
+•  Competing in microsecond market making, latency arbitrage, exchange colocation, or direct feed normalization in version 1.
+•  Guaranteeing a positive day, month, Sharpe ratio, or cumulative PnL.
+•  Automatically increasing leverage because a recent backtest or paper period is profitable.
+•  Searching an unbounded parameter space and publishing only the best result.
+•  Allowing the same process to modify strategy logic, approve its own evidence, and route live orders.
+[Heading2] 2  Success metrics
+--- TABLE ---
+Area | Primary metric | Release expectation
+Research integrity | Percentage of experiments with complete data, code, config, prompt, trial-family, and cost lineage | 100 percent
+Reproducibility | Byte-equivalent orders and metrics for repeated runs on the same snapshot | 100 percent for deterministic paths
+Data quality | Missing, duplicated, out-of-order, crossed-market, and late-event rates | Measured per feed; hard thresholds by feature
+Validation | Candidate pass rate through full gauntlet | Low by design; rejection is healthy
+Paper fidelity | Predicted versus observed fill rate, slippage, and latency error | Within instrument and order-type tolerance bands
+Operations | Unreconciled broker position duration | Zero during normal operation; immediate SAFE mode otherwise
+Risk | Limit breaches caused by system action | Zero
+Economics | Net PnL and expected shortfall after realized costs | Positive only as an empirical outcome, never guaranteed
+--- END TABLE ---
+[Heading2] 3  Architecture
+[Small] Figure 2  The language model sits above deterministic research and risk systems and has no direct capital path
+--- TABLE ---
+Service | Responsibility | Authoritative store
+Market data gateway | Normalize trades, quotes, bars, halts, LULD, calendars, reference data, and corporate actions. | Immutable object store plus catalog
+Feature service | Compute causal, time-indexed, versioned features with explicit lookbacks. | Parquet feature groups and metadata DB
+Experiment orchestrator | Resolve snapshots, run containers, capture seeds, logs, metrics, and artifacts. | Postgres registry and object store
+Backtest simulator | Replay clocks, generate signals, submit simulated orders, model fills, and calculate PnL. | Immutable experiment artifacts
+Validation service | Apply splits, corrections, perturbations, bootstrap tests, and release gates. | Evidence records
+Research agent layer | Propose hypotheses, inspect evidence, explain failures, and select authorized tools. | Prompt and tool audit log
+Portfolio and risk | Combine accepted alphas, size exposure, and enforce pre-trade and intraday limits. | Risk state and signed policy versions
+OMS and broker adapters | Own order state, idempotency, submission, cancellation, fills, and reconciliation. | Append-only order event log
+Monitoring plane | Observe health, drift, exposure, slippage, PnL, and incidents. | Metrics, logs, traces, alerts
+--- END TABLE ---
+[Heading2] 4  Recommended technology stack
+--- TABLE ---
+Layer | Version 1 choice | When to upgrade
+Language | Python 3.12 with strict typing; Rust only for proven hot paths | When profiling shows Python is the bottleneck
+Dataframes | Polars and Arrow | Keep; add specialized stream processors only when needed
+Research store | Partitioned Parquet plus DuckDB | Add distributed query only when local scans are inadequate
+Metadata | PostgreSQL | Keep; use read replicas for scale
+Live state | Redis for short-lived state and locks; Postgres for durable truth | NATS or Kafka only when event volume and consumers justify it
+API | FastAPI plus Pydantic models | Keep; split services by operational boundary
+Orchestration | Simple workers and scheduled jobs in Docker Compose | Dagster or Prefect for larger backfills and dependency graphs
+Artifacts | S3-compatible object storage such as MinIO locally | Managed object storage in production
+UI | Next.js or React with typed API client | Keep
+Observability | OpenTelemetry, Prometheus, Grafana, structured logs | Managed services if operational load grows
+Testing | pytest, Hypothesis, deterministic replay fixtures | Add simulation farms and chaos testing later
+--- END TABLE ---
+Qanat is a useful reference for inspectable table pipelines, point-in-time replay, MCP tooling, and net-of-cost reporting. Its public repository describes itself as a beta engine aimed at daily or weekly rebalancing and states that live trading, backfills, incremental windows, and benchmark attribution are not implemented. The proposed system should reuse the architectural lessons, not assume Qanat is an intraday execution engine. [1][2]
+[Heading2] 5  Operating states
+--- TABLE ---
+State | Permitted actions | Entry condition | Exit condition
+OFF | Read historical data and inspect prior artifacts only. | Manual shutdown or unrecoverable fault | Authenticated operator starts service
+RESEARCH | Run historical experiments; no broker session. | Normal development | Approved paper release
+SHADOW | Consume live data and emit hypothetical orders; no broker submission. | Candidate passes historical gates | Stable shadow metrics
+PAPER | Submit to isolated paper account. | Shadow approval and broker readiness | Paper gates pass or fail
+CANARY | Submit tightly capped live orders. | Explicit human approval | Scale, roll back, or stop
+LIVE | Trade within signed allocation and risk policy. | Canary evidence plus approval | Risk event, drift, or manual action
+SAFE | No new risk; cancel open orders; optional guarded flatten. | Any critical invariant failure | Manual review and reconciliation
+--- END TABLE ---
+[Heading1] Part B  Data and features
+[Heading2] 6  Data principles
+Intraday alpha research is primarily a data correctness problem. A strategy cannot be better than the timestamp semantics, corrections, corporate-action handling, universe history, quote quality, and execution assumptions beneath it. Data must be immutable at ingestion, versioned through normalization, and queryable as known at a specific decision time.
+[Heading3] Required time fields
+--- TABLE ---
+Field | Meaning | Use
+event_time | Timestamp assigned by the originating venue or source. | Market ordering and feature windows
+receive_time | When the gateway received the message. | Latency and stale-feed detection
+process_time | When normalization completed. | Pipeline monitoring
+knowledge_time | Earliest time the system was legally and technically able to know the value. | Point-in-time joins and leakage prevention
+effective_time | When a reference or corporate-action record becomes economically effective. | Adjustments and universe membership
+revision_time | When a correction or restatement arrived. | As-was versus latest views
+--- END TABLE ---
+For live streams, event ordering must use sequence numbers where the vendor provides them. Late trades, corrections, and cancel/error messages must update derived bars without silently changing old experiment snapshots. Alpaca documentation, for example, exposes nanosecond timestamps, trade corrections, cancel/error events, updated bars, LULD bands, and trading-status messages; those are examples of the event types the canonical schema must preserve. [6]
+[Heading2] 7  Data sources and minimum fields
+--- TABLE ---
+Dataset | Minimum fields | Critical controls
+Trades | symbol, event time, price, size, exchange, conditions, trade id, tape | Condition filtering, corrections, cancel/errors, sequence gaps
+Quotes | bid/ask price and size, venues, event time, conditions | Locked/crossed flags, stale quote detection, NBBO provenance
+Bars | open, high, low, close, volume, VWAP, trade count, window | Build internally where possible; mark late revisions
+Reference | stable instrument id, ticker history, exchange, security type, lot size | Never join solely on ticker
+Corporate actions | splits, dividends, mergers, symbol changes, effective and announcement times | Use raw prices for execution and adjusted series only for appropriate features
+Calendar | session, holidays, early closes, auction windows | Exchange calendar is authoritative
+Halts and bands | status, reason, resume time, LULD upper/lower bands | Block orders and simulate non-executable intervals
+Borrow and SSR | shortable, available quantity, borrow fee, locate state, Rule 201 status | No simulated short without plausible availability
+News and filings | source, publication time, receive time, entity links, revisions | No vendor backfill timestamps in historical decisions
+Broker events | orders, acks, rejects, fills, cancels, positions, cash, buying power | Append only and independently reconciled
+--- END TABLE ---
+[Heading2] 8  Storage layout
+[CodeBlock] storage/  raw/{source}/{dataset}/date=YYYY-MM-DD/hour=HH/*.parquet  normalized/{dataset}/date=YYYY-MM-DD/*.parquet  reference/instruments/version=.../*.parquet  features/{feature_group}/version=.../date=.../*.parquet  snapshots/{snapshot_id}/manifest.json  experiments/{experiment_id}/      hypothesis.yaml      strategy.yaml      environment.json      orders.parquet      fills.parquet      positions.parquet      pnl.parquet      metrics.json      validation.json      report.html  live/{account_id}/order_events/date=.../*.parquet
+Raw partitions are never overwritten. Corrections are appended and resolved through versioned views. Every experiment references a snapshot manifest containing content hashes, partitions, source license, calendar version, corporate-action version, and data-quality report.
+[Heading2] 9  Canonical schemas
+[CodeBlock] CREATE TABLE experiment (  experiment_id UUID PRIMARY KEY,  family_id UUID NOT NULL,  hypothesis_id UUID NOT NULL,  parent_experiment_id UUID,  created_at TIMESTAMPTZ NOT NULL,  dataset_snapshot_id TEXT NOT NULL,  code_commit TEXT NOT NULL,  container_digest TEXT NOT NULL,  strategy_spec_hash TEXT NOT NULL,  random_seed BIGINT NOT NULL,  trial_index INTEGER NOT NULL,  status TEXT NOT NULL,  requested_by TEXT NOT NULL,  approved_by TEXT,  UNIQUE(family_id, trial_index));CREATE TABLE order_event (  event_id UUID PRIMARY KEY,  account_id TEXT NOT NULL,  client_order_id TEXT NOT NULL,  broker_order_id TEXT,  event_type TEXT NOT NULL,  event_time TIMESTAMPTZ NOT NULL,  receive_time TIMESTAMPTZ NOT NULL,  strategy_version TEXT NOT NULL,  risk_policy_version TEXT NOT NULL,  payload JSONB NOT NULL,  UNIQUE(account_id, client_order_id, event_type, event_time));
+[Heading2] 10  Data quality gates
+--- TABLE ---
+Check | Example threshold | Action
+Sequence continuity | No unexplained gaps for data used by a tick or quote strategy | Mark interval unusable
+Freshness | Quote age below strategy-specific maximum at decision time | Suppress signal or order
+Crossed market | Crossed duration and frequency below feed tolerance | Exclude interval or switch source
+Bar completeness | Expected windows present for eligible symbols | Remove symbol-date before feature calculation
+Price validity | Positive, finite, within split-aware bounds | Quarantine event
+Volume validity | Nonnegative and consistent with source semantics | Quarantine partition
+Corporate actions | No unresolved ticker/split conflicts | Block snapshot release
+Clock sync | Host drift under defined milliseconds from trusted time source | Enter SAFE for live trading
+Vendor reconciliation | Random samples agree within documented feed differences | Investigate before release
+--- END TABLE ---
+[Heading2] 11  Universe construction
+Universe selection is part of the strategy and must be point in time. A default research universe should contain U.S. listed common stocks and selected ETFs that pass price, median dollar volume, spread, trade count, corporate-action, and short-availability rules as of the prior session or as of the decision timestamp. Avoid using current index constituents in old periods.
+[CodeBlock] universe:  asset_types: [common_stock, etf]  exchanges: [NYSE, NASDAQ, NYSE_ARCA]  min_price: 5.00  min_median_daily_dollar_volume_20d: 25_000_000  max_median_spread_bps_20d: 20  min_intraday_trade_count_20d: 5000  exclude:    - halted    - recent_ipo_under_60_sessions    - pending_delisting    - unresolved_corporate_action  membership_lag: 1_session
+Thresholds are configurable research defaults, not claims of optimality. They must be varied in robustness tests, and capacity estimates must use participation limits and order-book conditions rather than average volume alone.
+[Heading2] 12  Feature store
+A feature is an immutable, versioned transformation with explicit input tables, availability rules, lookback, warm-up period, missing-value policy, and expected update cadence. Features may be composed only when their knowledge timestamps are less than or equal to the decision timestamp.
+--- TABLE ---
+Group | Examples | Leakage risks
+Price and return | 1m to 120m returns, overnight gap, distance from open, high-low location | Using final bar values before bar close
+Liquidity | Quoted spread, effective spread, depth, dollar volume, Amihud proxy | Using later volume to scale an earlier order
+Order flow | Trade sign imbalance, quote imbalance, volume acceleration, cancel intensity | Incorrect trade signing or feed gaps
+Volatility | Realized variance, bipower variation, range estimators, downside volatility | Window overlapping future label
+Relative value | Sector-neutral return, residual return, pair spread, ETF residual | Current constituents applied historically
+Event | Earnings, guidance, filing, halt, macro release proximity | Publication versus vendor ingest time
+Regime | Index trend, cross-sectional dispersion, VIX proxy, breadth, correlation | Re-estimating full-history regime boundaries
+Execution | Spread forecast, fill probability, impact estimate, latency sensitivity | Training on post-decision book state
+--- END TABLE ---
+[CodeBlock] feature:  id: orderflow.trade_imbalance_5m  version: 3  inputs: [normalized.trades]  decision_clock: 1m_close  lookback: 5m  availability_lag: 250ms  expression: sum(signed_size) / sum(size)  missing_policy: null  valid_range: [-1, 1]  tests:    - causal_window    - finite_when_volume_positive    - invariant_to_events_after_decision_time
+[Heading1] Part C  Alpha research and simulation
+[Heading2] 13  Alpha DSL
+The Alpha DSL is the contract between probabilistic research agents and deterministic trading infrastructure. It must be expressive enough for useful intraday research but narrow enough to validate, diff, version, mutate, and audit. Arbitrary agent-written Python may run only inside a sandboxed research branch and cannot become production strategy logic until represented by reviewed operators.
+[CodeBlock] strategy:  id: intraday_momentum_volume_v1  family_id: intraday_momentum_volume  hypothesis: >    Five-minute residual momentum is more persistent when volume acceleration    and market breadth agree, except in high-spread or halt-adjacent states.clock:  timezone: America/New_York  evaluate: every_1m  first_entry: "09:45"  last_entry: "15:15"  flatten_by: "15:50"universe_ref: liquid_us_equities_v4features:  residual_return_5m: price.residual_return(window=5m, neutralize=sector)  volume_z: liquidity.volume_zscore(window=20d, time_of_day=true)  spread_bps: liquidity.nbbo_spread_bps()  breadth: market.equal_weight_return(window=5m)signal:  when: residual_return_5m > 1.0_sigma and volume_z > 1.5 and breadth > 0  score: rank(residual_return_5m) + 0.5 * rank(volume_z)  side: longorders:  entry: marketable_limit(offset_bps=3, ttl=3s)  exit:    - take_profit: 1.5_atr    - stop_loss: 0.8_atr    - time_stop: 25m    - portfolio_flatten: "15:50"risk:  risk_per_trade_nav_bps: 5  max_position_nav_pct: 2  max_symbol_adv_participation_pct: 0.10  max_concurrent_positions: 12
+[Heading3] DSL validation rules
+•  Every feature and operator resolves to a versioned registry entry.
+•  Decision clock, feature availability lag, and order timestamp are explicit.
+•  No expression may reference post-decision values, future extrema, final daily volume, or revised data unavailable at the time.
+•  Entries, exits, and end-of-day behavior are complete; no ambiguous discretionary clause is allowed.
+•  Order type, time in force, cancel/replace behavior, and price guard are explicit.
+•  Risk values must be within the globally signed policy envelope; strategy files may tighten but never loosen them.
+•  A compiler emits an operator graph, dependency manifest, static leakage report, complexity score, and canonical hash.
+[Heading2] 14  Hypothesis specification
+--- TABLE ---
+Field | Requirement
+Claim | One falsifiable sentence linking observable state to future outcome.
+Mechanism | Economic or microstructure explanation for why the relationship might persist after costs.
+Target | Return, rank, volatility, fill probability, or another measurable quantity with horizon.
+Universe | Point-in-time eligibility and exclusions.
+Decision time | Exactly when information becomes actionable.
+Counterfactual | What observation would weaken or reject the explanation.
+Confounders | Market beta, sector, spread, price, volatility, event state, and capacity.
+Expected failure regimes | Conditions under which the mechanism should disappear or reverse.
+Prior family trials | Count and summary of semantically or structurally related experiments.
+Stopping rule | Maximum variants and budget before reviewing the family.
+--- END TABLE ---
+[Heading2] 15  Intraday strategy research catalog
+The following are research templates, not recommended trades. Each must be tested as a family with full trial accounting and must compete against simple baselines. Familiar strategies often disappear after realistic spread, impact, latency, and selection controls.
+--- TABLE ---
+Family | Research idea | Primary failure modes | Required baselines
+Opening range continuation | Break of an early-session range with abnormal relative volume and aligned market or sector breadth. | False breakout, opening auction distortion, event-driven gaps, spread expansion. | Random direction; raw gap continuation; sector ETF exposure.
+Opening gap mean reversion | Reversal of an overnight gap after failed price acceptance and normalizing liquidity. | News with permanent information, halts, earnings, low float, short constraints. | Market/sector-adjusted gap; no-trade event filter ablation.
+Intraday residual momentum | Continuation of stock-specific returns after removing market and sector movement. | Crowded momentum unwind, high volatility reversal, late-day decay. | Raw momentum; sector-neutral equal-weight ranking.
+VWAP deviation reversion | Mean reversion after extreme distance from causal session VWAP with spread and order-flow confirmation. | Trend days, news repricing, use of final-session VWAP, thin liquidity. | Price z-score; time-of-day matched return reversal.
+Liquidity shock reversal | Short-horizon reversal after transient spread, depth, or signed-flow shock. | Information events, stale quotes, hidden liquidity, queue-model error. | Simple last-return reversal; matched liquidity states.
+Pairs and basket residual | Reversion of a stable residual against sector, ETF, or cointegrated basket. | Structural break, constituent change, borrow asymmetry, estimation leakage. | Rolling beta residual; sector-neutral cross-section.
+Event continuation | Post-earnings or news drift within the session when surprise, revisions, and flow align. | Timestamp error, duplicated news, look-ahead sentiment, halt/resume gaps. | Event direction only; price reaction only; no-text baseline.
+Close imbalance response | Very late-session response to public imbalance information with strict flatten rules. | Auction-specific fills, feed entitlement, extreme competition, inability to model queue. | No-trade and simple market-on-close benchmark.
+--- END TABLE ---
+[Heading3] Research protocol for each family
+1.  Pre-register the mechanism, target, decision clock, universe, core parameters, maximum search budget, expected failures, and acceptance criteria.
+2.  Build a naive baseline before adding ML or alternative data. If complexity does not improve net out-of-sample utility, keep the baseline.
+3.  Reserve a final untouched chronological holdout before examining results. Store its access event in the audit log.
+4.  Run feature causality tests and label-overlap analysis before training.
+5.  Use walk-forward training and validation with purging and embargo when samples share future return windows.
+6.  Apply the critic battery and multiple-testing corrections to the entire strategy family, including abandoned variations.
+7.  Advance to shadow and paper only after a written decision record explains the mechanism, evidence, weaknesses, capacity, and rollback triggers.
+[Heading2] 16  Backtest engine
+The backtester must be event driven. A bar-vectorized engine is acceptable for early feature research, but production eligibility requires an order-level replay at a resolution sufficient to model the intended holding period and order type. A strategy that trades on one-minute bars must not assume fills at the same bar close that triggered the signal.
+[Heading3] Event ordering contract
+[CodeBlock] for event in merged_market_clock:    apply_reference_and_status_updates(event)    update_market_state(event)    publish_only_features_whose_windows_are_closed(event.time)    if strategy_clock_fires(event.time):        signal = strategy.evaluate(causal_state)        intents = portfolio.convert(signal)        approved = pre_trade_risk.filter(intents, broker_shadow_state)        simulator.submit(approved, submit_time=event.time + decision_latency)    simulator.process_market_event(event)    accounting.mark_positions(causal_prices)    risk.evaluate_intraday_state()
+--- TABLE ---
+Invariant | Required behavior
+No same-event fill | An order cannot fill using a trade or quote that arrived before its simulated submission time.
+Stable priority | Events sharing a timestamp use vendor sequence, venue sequence, or a documented conservative order.
+Warm-up isolation | Warm-up data may create features but cannot contribute PnL.
+Session awareness | Early closes, halts, resumptions, auctions, and overnight boundaries are explicit.
+Cash and positions | Order availability is based on current simulated account state, not target weights alone.
+Deterministic randomness | Queue and partial-fill randomness uses a stored seed and repeatable generator.
+As-was data | Historical replay uses the snapshot available to that experiment, not silently revised current files.
+--- END TABLE ---
+[Heading2] 17  Fill and execution model
+Use a hierarchy of simulators. Research may begin with conservative bar fills, but a candidate may advance only when evaluated with the model appropriate to its order style. A broker paper environment is necessary but insufficient: Alpaca explicitly notes that its paper system does not model market impact, information leakage, latency slippage, queue position, price improvement, regulatory fees, or dividends, and may ignore displayed quantity constraints. [5]
+--- TABLE ---
+Model | Use | Minimum assumptions
+Bar pessimistic | Fast screening only | Next-bar availability; adverse side of spread; no fill if price merely touches under ambiguous path; volume participation cap.
+Quote replay | Marketable and passive limit orders | NBBO at arrival; latency; crossing cost; displayed size; partial fills; stale quote rejection.
+Trade and quote replay | Advanced candidate validation | Quote state, prints, trade conditions, queue estimate, cancels, corrections, venue status.
+Broker paper | Integration and operational testing | Broker acknowledgments, rejects, partial fills, reconnects, duplicate prevention.
+Live canary | Calibration only after approval | Minimal size; compare predicted versus realized fills and costs; no automatic scaling.
+--- END TABLE ---
+[Heading3] Cost decomposition
+[CodeBlock] NetPnL = GrossMarkToMarket         - Commissions         - RegulatoryAndExchangeFees         - HalfSpreadOrEffectiveSpread         - MarketImpact         - LatencySlippage         - BorrowFeesAndRecallLoss         - Financing         - OpportunityCostOfMissedFills
+•  Spread  Use the actual prevailing bid and ask at simulated arrival; do not use a constant basis-point deduction when quote data is available.
+•  Impact  Estimate as a function of order notional, spread, volatility, order-book depth, and participation. Calibrate on realized canary executions.
+•  Latency  Sample signal-to-submit and submit-to-ack distributions from production telemetry; rerun backtests under p50, p95, and stressed latency.
+•  Borrow  Record availability and fee as known at entry. Reject a historical short if borrow plausibility is absent rather than assuming free inventory.
+•  Fees  Version effective-dated broker, venue, exchange, and regulatory schedules. Recalculate net PnL when schedules change.
+[Heading2] 18  PnL and attribution
+PnL must reconcile from fills, not from desired weights. Mark realized and unrealized PnL separately, and attribute every dollar to alpha, beta, sector, spread, impact, fees, borrow, timing, and residual. Each position must answer why it exists and which signals, risk adjustments, and orders created it.
+--- TABLE ---
+Output | Required dimensions
+Trade ledger | strategy, symbol, entry/exit, side, size, prices, fees, slippage, hold time, exit reason
+Daily PnL | gross, cost components, net, realized, unrealized, long, short, benchmark residual
+Exposure | gross, net, beta, sector, factor, liquidity bucket, concentration, short borrow
+Execution | arrival price, decision price, fill price, effective spread, implementation shortfall, fill rate, cancel rate
+Opportunity | submitted not filled, filtered by risk, suppressed by stale data, capacity limited
+--- END TABLE ---
+[Heading1] Part D  Validation portfolio and risk
+[Heading2] 19  Anti overfitting architecture
+The largest threat is an automated search process that runs thousands of related ideas and promotes the luckiest result. Bailey and collaborators formalize the probability of backtest overfitting and the Deflated Sharpe Ratio, which adjusts performance claims for selection bias, non-normality, and repeated trials. The platform must treat the full research path as part of the statistical evidence, not only the final strategy. [7][8]
+[Small] Figure 3  Capital access is a sequence of revocable evidence gates
+[Heading3] Experiment split design
+•  Use chronological splits. Random shuffling is prohibited for time-dependent trading labels.
+•  Maintain development, validation, and a final untouched test period. The final test is opened once per materially new family, not once per parameter setting.
+•  For trained models, use rolling or expanding walk-forward folds. Train only on observations earlier than the validation fold.
+•  Purge training samples whose label windows overlap the test fold and apply an embargo after the test fold when leakage can occur through nearby observations.
+•  Fit scalers, imputers, feature selectors, regime boundaries, probability calibration, and hyperparameters inside each training fold.
+•  Report aggregate results and the distribution across folds. A single favorable period is insufficient.
+[Heading2] 20  Validation gauntlet
+--- TABLE ---
+Gate | Test | Default research threshold
+Integrity | PIT audit, snapshot hash, causal-feature unit tests, full trial registry | All pass
+Economic | Net OOS expectancy and PnL after base costs | Positive with uncertainty reported
+Cost stress | Spread, slippage, fees, latency, and missed fills increased | Positive at 2x plausible costs; no catastrophic tail at 3x
+Walk-forward | Performance across chronological folds | Majority of folds positive; no single fold dominates
+Parameter stability | Neighboring parameters and simpler variants | Broad plateau; at least 70 percent of defined neighbors nonnegative
+Universe stability | Liquidity cutoffs, sectors, symbols, and membership variants | No dependence on a tiny set of names
+Concentration | Remove best day, week, and top contributors | Core conclusion survives
+Bootstrap | Stationary or block bootstrap of daily or trade clusters | High probability of positive net expectancy; interval includes realistic uncertainty
+Regime | Volatility, trend, dispersion, rates, event, and liquidity regimes | Failures understood and gated; no hidden catastrophic regime
+Attribution | Market, sector, size, momentum, reversal, and liquidity exposures | Claimed alpha not merely uncontrolled beta
+Multiple testing | DSR, PBO or equivalent family-aware correction | DSR confidence at least 0.95 and PBO below 0.20 as initial gates
+Paper fidelity | Predicted vs observed fills, costs, and performance | Within signed tolerances before canary
+--- END TABLE ---
+Thresholds are starting governance defaults, not universal truths. They should be tightened or relaxed only through a documented policy change applied prospectively. A strategy cannot select the threshold after seeing results.
+[Heading2] 21  Required robustness attacks
+•  Shift every signal forward by one and two bars to expose accidental same-bar fills and fragile timing.
+•  Delay submission by measured p50, p95, and outage-recovery latency.
+•  Widen spread and multiply impact and fees independently rather than with one generic cost number.
+•  Perturb lookbacks, thresholds, stop levels, holding periods, neutralization, universe cutoffs, and rebalance clocks on a predeclared neighborhood.
+•  Remove the best year, month, week, day, stock, sector, and event category one at a time.
+•  Use alternative but legitimate data cleaning rules and quote-condition filters.
+•  Rebuild features from a second vendor sample where licensing permits.
+•  Test on synthetic null labels and time-scrambled labels; the pipeline should not discover persistent edge.
+•  Run placebo entry times and economically irrelevant features.
+•  Apply capacity curves at increasing notional and participation rather than extrapolating small-size returns linearly.
+•  Test kill-switch, halt, LULD, stale-feed, partial-fill, reject, disconnect, reconnect, and duplicate-event behavior inside replay.
+[Heading2] 22  Performance metrics
+--- TABLE ---
+Category | Metrics
+Return | Gross and net PnL, average trade, CAGR only when meaningful, return on deployed capital, return on risk budget
+Risk adjusted | Sharpe, probabilistic Sharpe, Deflated Sharpe, Sortino, Calmar, information ratio
+Tail | Maximum drawdown, drawdown duration, VaR, expected shortfall, worst day/week, skew, kurtosis
+Trade quality | Hit rate, payoff ratio, profit factor, MAE, MFE, holding time, time to recovery
+Execution | Implementation shortfall, effective spread, realized spread, fill ratio, partial-fill ratio, cancel-to-fill ratio
+Stability | Fold dispersion, regime dispersion, parameter neighborhood survival, PBO, bootstrap intervals
+Capacity | Turnover, participation, average spread consumed, impact curve, borrow availability, estimated scalable notional
+Diversification | Correlation to benchmark, factors, strategy library, and deployed book; marginal expected shortfall
+--- END TABLE ---
+[Heading2] 23  Candidate promotion policy
+--- TABLE ---
+Stage | Minimum evidence | Capital
+Research approved | Integrity, economic, robustness, and multiple-testing gates pass; signed review | None
+Shadow | At least 20 trading sessions of live data; no operational safety defects | None
+Paper | At least 60 trading sessions and 200 representative executions, extended for low-frequency candidates | Simulated only
+Canary | Paper fidelity within tolerance; no unresolved critical incidents; human approval | Initial cap such as 1 to 5 percent of intended strategy allocation
+Limited live | At least 20 canary sessions or sufficient execution sample; realized costs within stress envelope | Stepwise increases only
+Normal live | Stable rolling evidence, risk headroom, diversification benefit | Within policy cap
+--- END TABLE ---
+A calendar minimum is not enough. The required sample must span enough independent days, signals, instruments, volatility states, and execution conditions to estimate the relevant uncertainty. Promotion remains a revocable decision.
+[Heading2] 24  Portfolio construction
+Accepted signals do not directly determine position sizes. A portfolio layer converts standardized forecasts into desired risk while accounting for forecast uncertainty, covariance, liquidity, capacity, transaction costs, existing holdings, and limits. Simpler allocation should be the default until evidence justifies complexity.
+[CodeBlock] maximize_w    μᵀw - λrisk × wᵀΣw - λturn × Cost(w - w_prev) - λconc × Concentration(w)subject to    gross_exposure <= gross_limit              abs(net_exposure) <= net_limit              abs(position_i) <= min(position_cap_i, liquidity_cap_i, borrow_cap_i)              sector_exposure within bounds              predicted_expected_shortfall <= ES_budget              intraday_margin_usage <= broker_and_internal_limit
+•  Standardize forecasts using training-only distributions and clip extremes.
+•  Shrink expected returns toward zero as uncertainty, age, or live drift increases.
+•  Use robust covariance or factor models; do not invert an unstable full covariance matrix without shrinkage.
+•  Penalize turnover at the optimizer level so the agent cannot create gross alpha that disappears in execution.
+•  Allocate across strategies based on marginal net utility and correlation, not standalone Sharpe alone.
+[Heading2] 25  Risk policy
+Risk is enforced in three independent places: strategy compilation, pre-trade checks, and continuous account monitoring. The broker may add stricter controls. The platform must discover the broker account rules rather than assuming the former pattern-day-trader framework: FINRA adopted new intraday margin standards effective June 4, 2026, eliminated the former day-trade-count designation and $25,000 minimum in the new rule, and allowed member firms to phase in implementation through October 20, 2027. [3]
+--- TABLE ---
+Limit | Conservative initial default | Automatic response
+Risk per trade | 5 bps of NAV expected stop loss; maximum 10 bps | Resize or reject
+Single position | 2 percent NAV or lower liquidity cap | Resize
+Gross exposure | 50 percent NAV before leverage is separately approved | Reject increase
+Net exposure | 20 percent NAV absolute | Hedge or reject
+Sector exposure | 15 percent NAV absolute | Resize lowest-confidence orders
+Daily loss | 50 bps NAV from start-of-day high-water mark | Cancel entries; SAFE; guarded flatten
+Weekly loss | 100 bps NAV | Return affected strategies to paper
+Monthly drawdown | 200 bps NAV | Freeze scaling and formal review
+Participation | 10 bps of ADV for early live trading and order participation under 5 percent of interval volume | Slice, defer, or reject
+Order price collar | Within strategy-specific band around fresh NBBO or reference | Reject as potentially erroneous
+Stale market data | No new risk beyond configured quote age | Pause symbol or global trading
+--- END TABLE ---
+These defaults are intentionally conservative examples, not personalized advice. They must be calibrated to account size, liquidity, holding period, broker requirements, and verified loss tolerance. Short selling must also respect locate availability, borrow economics, and Rule 201 restrictions after a 10 percent decline; the SEC notes that short positions can have theoretically unlimited loss. [11]
+[Heading3] Pre trade checks
+1.  Authenticate strategy version, account, operator state, and signed risk policy.
+2.  Reject duplicate client order IDs and conflicting outstanding intents.
+3.  Validate symbol status, trading session, halt state, LULD band, and fresh market data.
+4.  Validate order side, type, quantity, notional, price collar, lot size, and time in force.
+5.  For shorts, confirm broker shortability, estimated borrow cost, locate state where required, and Rule 201 handling.
+6.  Project post-fill position, gross/net/sector/factor exposures, buying power, and intraday margin.
+7.  Check strategy, symbol, account, daily-loss, rate, order-count, participation, and concentration limits.
+8.  Persist a reason-coded approval or rejection before any broker call.
+SEC Rule 15c3-5 applies to broker-dealers with market access, but its control principles are useful here: pre-set credit or capital thresholds, erroneous-order filters, authorized access, and immediate post-trade reporting. The system should implement these protections even though the retail broker remains the regulated market-access gatekeeper. [14]
+[Heading2] 26  Stress and scenario library
+--- TABLE ---
+Scenario | Simulation
+Flash move | Price gaps through stop, spread expands 10x, depth collapses, partial fills only
+Trading halt | No fills during halt; cancel behavior follows venue and broker semantics; resume gap
+LULD | Orders outside bands blocked or non-executable; pause and resumption messages applied
+Feed failure | Frozen quotes, delayed trades, sequence gap, source disagreement
+Broker failure | Timeout after submission, unknown order state, duplicate retry risk
+Short recall | Borrow availability disappears; forced cover at stressed price
+Crowded unwind | All correlated strategies lose together and liquidity worsens
+Model drift | Signal mean, variance, feature distribution, hit rate, and cost residual change
+Operator error | Wrong allocation, stale config, invalid account, accidental double start
+--- END TABLE ---
+[Heading1] Part E  Agents memory execution and operations
+[Heading2] 27  Agent architecture
+--- TABLE ---
+Agent | Authorized outputs | Prohibited capability
+Researcher | Hypothesis specification and literature links | Code execution, approval, orders
+Data agent | Dataset availability report and quality queries | Editing raw data or inventing missing values
+Quant compiler | Alpha DSL draft and dependency graph | Live broker access
+Experiment agent | Signed experiment request within budget | Changing holdout or hidden thresholds
+Critic | Falsification plan, attacks, and rejection recommendation | Weakening required gates
+Risk agent | Read-only exposure analysis and proposed tighter limits | Raising limits or submitting orders
+Portfolio agent | Allocation proposal within envelope | Bypassing deterministic optimizer or policy
+Meta-research agent | Research-direction ranking and redundancy detection | Reward based on raw in-sample Sharpe
+--- END TABLE ---
+Each tool call is typed, schema validated, budgeted, logged, and attributable to a model version, prompt, user, and project state. A deterministic policy engine authorizes tools. Natural-language instructions never grant additional permissions.
+[Heading2] 28  Research memory and knowledge graph
+[Small] Figure 4  Self improvement means cumulative evidence and better experiment selection, not autonomous leverage
+--- TABLE ---
+Node | Required properties
+Hypothesis | claim, mechanism, target, horizon, author, created time, status
+Dataset | snapshot, license, coverage, timing semantics, known limitations
+Feature | definition, inputs, version, availability, lookback, owner, tests
+Strategy | canonical DSL, family, complexity, parameters, version
+Experiment | snapshot, code, seed, trial index, metrics, artifacts, cost model
+Regime | definition version, dates, feature boundaries fitted without leakage
+Observation | production or research fact with timestamp and source
+Failure | failure type, severity, reproduction, mitigation, related incidents
+Decision | promote, revise, reject, deallocate, approver, evidence and rationale
+--- END TABLE ---
+--- TABLE ---
+Edge | Meaning
+TESTED_BY | Hypothesis to experiment
+USES_FEATURE | Strategy to feature
+USES_DATA | Feature or experiment to snapshot
+SUPPORTS | Evidence supports claim
+CONTRADICTS | Evidence weakens claim
+FAILED_IN | Strategy failed in regime or incident
+DERIVED_FROM | New idea descends from prior evidence
+SIMILAR_TO | Semantic or structural near-duplicate
+DEPLOYED_AS | Strategy version to allocation
+INVALIDATED_BY | Result invalidated by discovered defect
+--- END TABLE ---
+Before creating a new experiment, the researcher queries the graph and embedding index for similar hypotheses, overlapping features, equivalent transformations, and prior failure modes. If similarity is high, the new run joins the existing family and inherits its trial count. This prevents superficial renaming from resetting the multiple-testing penalty.
+[Heading2] 29  Self improvement policy
+The first self-improvement mechanism is procedural: better memory, fewer redundant experiments, stronger falsification, and improved calibration of costs and risk. Only after a large trustworthy experiment registry exists should the platform learn a research policy.
+--- TABLE ---
+State | Actions | Reward signal
+Existing evidence, available data, research budget, regime coverage, failure clusters | Create feature, combine features, mutate DSL, run ablation, acquire dataset, stop family | Incremental out-of-sample net utility after robustness and diversity penalties
+--- END TABLE ---
+•  Use a contextual bandit before full reinforcement learning. The action is which experiment to run, not which stock to buy.
+•  Compute reward only after validation, never from in-sample performance.
+•  Charge the policy for compute, data, trial count, strategy complexity, and similarity to existing tests.
+•  Preserve exploration with a fixed budget and do not let recent profitable families monopolize research.
+•  Train and evaluate the research policy on historical registry slices so future outcomes remain unseen.
+•  Keep the policy advisory until it outperforms simple experiment-selection heuristics prospectively.
+[Heading2] 30  Broker and OMS design
+The order management system is a state machine, not a thin HTTP wrapper. It owns idempotent client order IDs, monotonic state transitions, retries, unknown states, cancel/replace rules, and reconciliation. The broker is authoritative for actual orders, fills, positions, cash, and buying power.
+[CodeBlock] CREATED -> RISK_APPROVED -> SUBMITTING -> ACKNOWLEDGED -> PARTIALLY_FILLED -> FILLED                    |              |              |              |                    +-> REJECTED   +-> UNKNOWN    +-> CANCELING  +-> CANCELEDUNKNOWN is not retried as a new order. Query broker by client_order_id, reconcile,and enter SAFE mode if the state cannot be resolved inside the timeout budget.
+--- TABLE ---
+Adapter method | Contract
+get_capabilities | Sessions, order types, shorting, fractional support, data feed, margin model, rate limits
+get_account | Cash, equity, buying power, margin and restriction state with timestamp
+get_positions | Broker-authoritative positions and cost basis
+submit_order | Idempotent client ID, signed intent, timeout with unknown-state handling
+cancel_order | Idempotent cancel; report too-late-to-cancel separately
+replace_order | Atomic only if broker supports it; otherwise cancel-confirm-submit
+stream_events | Ordered acknowledgments, rejects, partial fills, fills, cancels and corrections
+get_orders_since | Reconciliation endpoint for disconnect recovery
+get_shortability | Availability, estimated fee, timestamp and locate status
+--- END TABLE ---
+[Heading2] 31  Live startup and shutdown
+[Heading3] Startup checklist
+1.  Verify deployment identity, signed configuration, secrets source, clock synchronization, and trading date.
+2.  Fetch broker capabilities and account restrictions, including the implemented intraday margin regime.
+3.  Load broker orders, fills, positions, cash, and buying power; reconcile with the local event log.
+4.  Connect market data, confirm sequence and freshness, and warm features without emitting orders.
+5.  Validate calendar, session state, halts, LULD, borrow, risk limits, daily PnL baseline, and kill switch.
+6.  Enter SHADOW for a minimum warm-up interval. Move to PAPER, CANARY, or LIVE only if every invariant passes.
+[Heading3] Shutdown checklist
+1.  Block new risk and persist the reason and operator.
+2.  Cancel outstanding entry orders and reconcile cancel outcomes.
+3.  Flatten positions if policy requires, using price guards and halt-aware behavior; never assume a market order guarantees a safe price.
+4.  Reconcile final fills, positions, cash, fees, and PnL with the broker.
+5.  Seal the session event log, data-quality report, strategy versions, risk policy, incidents, and attribution report.
+[Heading2] 32  Monitoring and alerts
+--- TABLE ---
+Domain | Metrics | Critical trigger
+Data | Message rate, gap count, quote age, crossed rate, correction rate | Feed stale or sequence integrity lost
+Strategy | Signal count, score distribution, forecast mean, feature nulls, suppressed signals | Distribution outside signed range
+Execution | Ack latency, reject rate, fill rate, slippage, cancel latency, unknown orders | Unknown order or slippage breach
+Risk | Gross/net, beta, sectors, concentration, intraday margin, drawdown | Any hard limit or broker discrepancy
+PnL | Gross, costs, net, realized/unrealized, attribution residual | Daily stop or unexplained residual
+Systems | CPU, memory, queue depth, restarts, clock drift, database lag | Clock drift, event backlog, durable-store failure
+Agent | Tool calls, budget, schema rejects, prompt injection detections | Unauthorized capability attempt
+--- END TABLE ---
+Alerts must be actionable and mapped to a runbook. Critical risk and reconciliation alerts page immediately and automatically move the system to SAFE. Informational performance alerts do not change capital without deterministic rules.
+[Heading2] 33  Security and AI safety
+•  Broker credentials exist only in the execution service secret store. Research and LLM services receive no credential, token, or network route capable of order submission.
+•  Use separate paper and live accounts, keys, hosts, databases, queues, and alert channels. A configuration flag alone is insufficient separation.
+•  Require least-privilege service identities, short-lived credentials where supported, network allowlists, encryption in transit and at rest, and audited secret rotation.
+•  Sandbox research code with no broker network access, read-only snapshot mounts, resource quotas, and an explicit output directory.
+•  Treat news, filings, web content, and retrieved documents as untrusted data. Strip active content and prevent prompt text from changing tool permissions.
+•  Sign production strategy and risk-policy artifacts. The executor accepts only approved hashes from the release registry.
+•  Maintain dependency locks, software bills of materials, vulnerability scanning, protected branches, mandatory review, and reproducible containers.
+•  Exercise backup, restore, credential-revocation, broker-disconnect, and incident-response procedures.
+NIST frames AI risk management as a voluntary way to incorporate trustworthiness into design, development, use, and evaluation; its Secure Software Development Framework recommends integrating security practices into the software lifecycle. Those principles support the platform separation, evidence, and release controls specified here. [9][10]
+[Heading2] 34  Regulatory and operational constraints
+This section is an engineering checklist, not legal advice. Confirm requirements with the broker and a qualified professional before live deployment, especially if the system will trade for anyone else, accept outside capital, provide recommendations, or be sold as a service.
+•  FINRA intraday margin rules changed in 2026, but brokers may be in different implementation phases through October 2027. Query and display the actual broker policy. [3]
+•  Most covered U.S. securities transactions settle T+1 for trades on or after May 28, 2024. Cash-account and margin-account logic must use the broker-reported settled and available funds. [12]
+•  Short-selling behavior must respect broker availability and Regulation SHO, including order marking, locate handling by the broker, and Rule 201 price restrictions. [11]
+•  The simulator and live gateway must consume halt and LULD status. Price bands and pauses can prevent or delay execution. [13]
+•  Market-data licenses govern storage, redistribution, user display, and derived data. Entitlements must be represented in the data catalog and access policy.
+•  Retain complete records of strategy versions, approvals, orders, executions, reconciliations, incidents, and model changes for operational and tax reporting needs.
+The SEC warns that day trading is highly risky, expensive, and capable of producing severe loss, especially with borrowed money. This is why the platform begins with research and paper modes, constrains leverage, and treats profitability as uncertain. [4]
+[Heading1] Part F  Delivery plan and engineering contracts
+[Heading2] 35  Testing strategy
+--- TABLE ---
+Test layer | Examples | Release blocker
+Unit | Return math, windows, timestamp comparisons, fee calculations, risk rules, state transitions | Any failure
+Property | No future read, PnL conservation, position equals signed fills, idempotent retries | Any invariant violation
+Golden replay | Known tiny market stream with exact expected features, orders, fills, and PnL | Diff without approved fixture change
+Differential | Vectorized research engine versus event engine where assumptions overlap | Unexplained discrepancy
+Mutation | Intentionally introduce look-ahead, missing fees, same-bar fills, duplicate orders | Tests fail to detect defect
+Integration | Market feed, feature clock, risk, OMS, broker sandbox, reconciliation | Unknown or duplicate order
+Chaos | Disconnects, timeouts, stale feeds, clock drift, database failover, delayed fills | System does not enter safe behavior
+Statistical | Null labels, random strategies, multiple trials, bootstrap calibration | False-positive controls fail calibration
+Security | Secret scans, authorization, prompt injection, artifact signature, dependency vulnerabilities | Critical issue
+--- END TABLE ---
+[Heading2] 36  Build roadmap
+--- TABLE ---
+Phase | Deliverables | Exit criteria
+0  Foundations | Monorepo, schemas, CI, deterministic environment, data license decisions, threat model | Golden replay and secure config pass
+1  Market data | Trades, quotes, bars, reference, corporate actions, calendar, halts; raw and normalized stores | 30-session quality report and reproducible snapshots
+2  Backtester | Event clock, account, orders, fills, costs, PnL, attribution, reports | Golden and differential tests pass
+3  Research core | Feature registry, Alpha DSL, experiment registry, baseline strategies | End-to-end experiment reproducible from hash
+4  Validation | Walk-forward, purge/embargo, perturbations, bootstrap, DSR, PBO, regime tests | Known overfit fixtures rejected
+5  Agent layer | Researcher, data agent, compiler, critic, permissions, audit log | LLM cannot bypass schema or gates
+6  Live shadow | Streaming features, risk state, OMS, broker adapter, reconciliation, dashboards | 20 clean shadow sessions
+7  Paper | Paper account, incident runbooks, fill-model calibration | 60 sessions and execution sample; no critical defects
+8  Canary | Signed releases, tiny live allocation, realized-cost monitoring | Human review after canary evidence
+9  Meta research | Knowledge graph, similarity, experiment selection policy | Prospective improvement over simple heuristic
+--- END TABLE ---
+[Heading2] 37  Suggested repository
+[CodeBlock] trading-system/  apps/    api/                 # FastAPI control and query API    web/                 # Research, risk, execution and incident UI    live_runner/         # Signed strategy runtime  packages/    schemas/             # Pydantic and Arrow contracts    market_data/         # Connectors and normalization    features/            # Registry and causal feature operators    alpha_dsl/           # Parser, validator and compiler    backtest/            # Event engine, fills and accounting    validation/          # Walk-forward, robustness, DSR and PBO    portfolio/           # Forecast scaling and optimizer    risk/                # Pre-trade and continuous limits    oms/                 # Order state and reconciliation    brokers/             # Paper and live adapters    agents/              # Tool schemas and permission policy    memory/              # Hypothesis and evidence graph  configs/    universes/ strategies/ risk_policies/ environments/  tests/    unit/ property/ golden/ integration/ chaos/ statistical/  infra/    docker/ migrations/ observability/ runbooks/
+[Heading2] 38  API surface
+--- TABLE ---
+Method and path | Purpose | Authorization
+POST /hypotheses | Create structured hypothesis and search for duplicates | Research user or researcher agent
+POST /experiments | Create immutable experiment request | Experiment agent within budget
+POST /experiments/{id}/run | Queue sandboxed execution | Policy engine
+GET /experiments/{id} | Metrics, lineage, artifacts and validation | Read only
+POST /candidates/{id}/critic | Run mandatory robustness battery | Critic service
+POST /releases | Request signed shadow, paper, or live release | Human approver plus policy
+GET /risk/state | Current limits, exposures, PnL, margin and health | Read only
+POST /risk/kill | Enter SAFE and execute configured cancel/flatten workflow | Strong operator authentication
+GET /orders and /fills | Reconciled broker and local event views | Operations read only
+--- END TABLE ---
+[Heading2] 39  Example experiment manifest
+[CodeBlock] experiment_id: 8a4c2f62-...family_id: opening_range_continuationtrial_index: 37created_at: 2026-09-19T18:30:00Zcode_commit: 4d3a9f...container_digest: sha256:...dataset_snapshot_id: us_equities_sip_2018_2026_v17strategy_spec_hash: sha256:...random_seed: 910284splits:  development: [2018-01-01, 2022-12-31]  walk_forward_validation: [2023-01-01, 2024-12-31]  final_holdout: [2025-01-01, 2026-06-30]cost_model: execution_cost_v8family_trial_count_at_start: 36holdout_access_count: 0requested_attacks:  - latency_stress  - cost_2x_3x  - parameter_neighborhood  - remove_top_contributors  - universe_perturbation  - block_bootstrap  - factor_attribution
+[Heading2] 40  Acceptance criteria for version 1
+•  A reviewer can reproduce any reported metric from the experiment ID alone using pinned data, code, container, config, and seed.
+•  A static and dynamic causality test proves that features cannot access observations after their decision timestamp.
+•  Every strategy variant appears in a family trial registry, including failed, canceled, and agent-generated experiments.
+•  The simulator rejects same-bar look-ahead fills and reconciles cash, positions, and PnL exactly from fills.
+•  Cost reports show gross, each cost component, base net, and stressed net results.
+•  Known overfit synthetic strategies fail at least one validation gate; known stable synthetic signals pass within calibrated rates.
+•  The agent cannot access live broker credentials, modify risk policies, open the final holdout silently, or approve a release.
+•  Duplicate submission, network timeout, unknown order, disconnect, partial fill, halt, stale data, and kill-switch tests all resolve to documented safe states.
+•  Paper and live environments cannot share account IDs or credentials and are visibly distinguished in the UI and logs.
+•  No live order is possible before signed strategy, allocation, risk policy, operator approval, successful startup reconciliation, and fresh market data.
+[Heading2] 41  Failure modes and mitigations
+--- TABLE ---
+Failure | Symptom | Mitigation
+Look ahead | Unrealistic early fills or strong decay after one-bar delay | Knowledge timestamps, causal operators, signal-delay tests
+Survivorship | Old backtests use current liquid winners | Point-in-time instrument and universe history
+Selection bias | Best of thousands looks extraordinary | Family registry, DSR, PBO, final holdout
+Optimistic fills | High passive fill rate and no queue cost | Quote/trade replay, queue uncertainty, canary calibration
+Cost blindness | Gross edge positive, net edge negative | Cost decomposition and 2x/3x stress
+Regime dependence | All profit from one volatility episode | Regime report, time folds, exposure gates
+Correlation crowding | Several strategies fail together | Marginal risk allocation and shared-feature analysis
+Model drift | Feature and outcome relation changes | Rolling monitoring, de-risk thresholds, retraining policy
+Order duplication | Retry creates multiple live orders | Idempotent IDs and UNKNOWN reconciliation
+Agent reward hacking | Agent maximizes backtest score | Reward on robust OOS utility; deterministic gates; budget penalties
+Prompt injection | External text attempts to issue instructions | Untrusted-data boundary and policy-controlled tools
+Broker rule mismatch | Orders rejected or margin unexpectedly constrained | Startup capability discovery and broker-authoritative state
+--- END TABLE ---
+[Heading2] 42  First implementation backlog
+1.  Choose one full-market data source and one broker paper API; document licensing, coverage, latency, corrections, and limitations.
+2.  Implement instrument master, exchange calendar, corporate actions, trades, quotes, bars, halts, and data-quality reports.
+3.  Create content-addressed snapshot manifests and a command that materializes a snapshot reproducibly.
+4.  Build a tiny deterministic replay fixture before a large backtester.
+5.  Implement account, order state machine, marketable-limit fills, conservative passive fills, fees, spread, and PnL reconciliation.
+6.  Create the feature registry with causality tests and 15 to 25 baseline features.
+7.  Create Alpha DSL version 1 with momentum, reversal, VWAP, relative-value, filters, exits, and risk operators.
+8.  Implement experiment registry, family trial counting, container capture, and report generation.
+9.  Implement walk-forward evaluation, purge/embargo, parameter neighborhoods, cost stress, block bootstrap, DSR, and PBO.
+10.  Add three baseline strategy families and deliberately overfit controls to validate the gauntlet.
+11.  Add researcher and critic agents with read-only research tools and schema-only write tools.
+12.  Build live shadow data flow, OMS, broker paper adapter, reconciliation, SAFE mode, kill switch, and dashboards.
+[Heading2] 43  Decision checklist before any live capital
+--- TABLE ---
+Question | Required answer
+Is the claimed edge still positive after realistic and stressed costs? | Yes, with uncertainty and attribution shown.
+Does it survive chronological OOS, perturbations, regimes, and multiple-testing controls? | Yes, under predeclared gates.
+Can every result and decision be reproduced? | Yes, from immutable IDs and hashes.
+Does paper behavior match the simulator closely enough? | Yes, within signed fill, latency, and cost tolerances.
+Are failure regimes understood and automatically gated? | Yes.
+Can the strategy lose more than the approved budget under plausible stress? | No; if yes, resize or reject.
+Can an LLM, a retry, or a stale service bypass risk? | No, demonstrated by tests.
+Can the operator stop new risk and reconcile positions immediately? | Yes, exercised in a drill.
+Does the broker confirm current account and intraday margin capabilities? | Yes, fetched at startup and displayed.
+Is the remaining uncertainty acceptable with canary size? | Explicit human decision documented.
+--- END TABLE ---
+[Heading1] Sources
+[Small] [1] FideTo Labs, Qanat repository and README
+[Small] [2] FideTo Labs, Qanat backtesting documentation
+[Small] [3] FINRA Regulatory Notice 26-10, new intraday margin standards
+[Small] [4] U.S. Securities and Exchange Commission, Day Trading Your Dollars at Risk
+[Small] [5] Alpaca documentation, Paper Trading and simulation limitations
+[Small] [6] Alpaca documentation, Real-time Stock Data schemas and market events
+[Small] [7] Bailey and Lopez de Prado, The Deflated Sharpe Ratio, publication listing and preprint links
+[Small] [8] Bailey, Borwein, Lopez de Prado, and Zhu, The Probability of Backtest Overfitting, publication listing and preprint links
+[Small] [9] NIST, Artificial Intelligence Risk Management Framework
+[Small] [10] NIST SP 800-218, Secure Software Development Framework
+[Small] [11] U.S. Securities and Exchange Commission, Key Points About Regulation SHO
+[Small] [12] Investor.gov, New T+1 Settlement Cycle Investor Bulletin
+[Small] [13] Limit Up Limit Down Plan official site
+[Small] [14] U.S. Securities and Exchange Commission, Rule 15c3-5 Risk Management Controls for Market Access
+[Small] [15] Nasdaq TotalView ITCH specification, example of order-book event semantics
+[Heading1] Glossary
+--- TABLE ---
+Term | Definition
+ADV | Average daily volume or dollar volume, always with a defined lookback and point-in-time calculation.
+Alpha DSL | Constrained, versioned representation of a strategy hypothesis, features, signals, execution, and risk.
+Canary | A minimal live-capital deployment intended to test operational and execution assumptions.
+DSR | Deflated Sharpe Ratio; a selection- and non-normality-aware performance statistic.
+Embargo | Exclusion interval used to reduce leakage between time-series training and test samples.
+Implementation shortfall | Difference between decision value and realized execution value including missed fills.
+Knowledge time | Earliest timestamp at which the system could have known a record.
+LULD | Limit Up Limit Down price-band mechanism and related trading pauses.
+NBBO | National Best Bid and Offer.
+PBO | Probability of Backtest Overfitting.
+PIT | Point in time; data and membership as known at the historical decision time.
+Purging | Removing training samples whose label intervals overlap a test interval.
+SAFE mode | Operational state that blocks new risk and performs configured cancel and reconciliation actions.
+Shadow | Live-data evaluation in which orders are hypothetical and never sent to a broker.
+--- END TABLE ---
