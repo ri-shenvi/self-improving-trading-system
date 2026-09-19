@@ -26,6 +26,7 @@ dev = [
     "ruff>=0.8",
     "pytest>=8.3",
     "hypothesis>=6.115",
+    "pyarrow-stubs>=20.0.0.20260819",
 ]
 
 [tool.uv.workspace]
@@ -123,7 +124,10 @@ disallow_untyped_defs = false
 # --------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers --strict-config"
+# importlib import mode: the test layers in §35 are directories, not packages, so
+# tests/unit/test_money.py and tests/property/test_money.py share a module
+# basename. The default prepend mode resolves that by basename and collides.
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
 markers = [
     "unit: return math, windows, timestamp comparisons, fee calculations (§35)",
     "property: no-future-read, PnL conservation, idempotent retries (§35)",
