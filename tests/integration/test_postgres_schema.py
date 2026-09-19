@@ -111,7 +111,21 @@ def _one(cur: psycopg.Cursor[Any]) -> tuple[Any, ...]:
     return row
 
 
-def _event(cur: psycopg.Cursor[Any], **overrides: object) -> None:
+#: Delay between an event and our knowledge of it, matching the normalizer's
+#: declared publication lag.
+_LAG_NS = 250_000
+
+
+def _event(cur: psycopg.Cursor[Any], **overrides: Any) -> None:
+    """Insert one order event, internally consistent by default.
+
+    receive and knowledge times are *derived* from event_time_ns rather than
+    fixed, so moving the event time keeps the row satisfying
+    order_event_knowledge_not_before_event. Overriding a derived field
+    explicitly still wins, which is how the leakage test builds a row the
+    constraint must reject.
+    """
+    event_ns: int = overrides.pop("event_time_ns", 1_789_824_600_000_000_000)
     row = {
         "event_id": str(uuid.uuid4()),
         "account_id": "paper-1",
@@ -121,9 +135,9 @@ def _event(cur: psycopg.Cursor[Any], **overrides: object) -> None:
         "event_type": "ack",
         "state": "acknowledged",
         "risk_reason": "approved",
-        "event_time_ns": 1_789_824_600_000_000_000,
-        "receive_time_ns": 1_789_824_600_000_250_000,
-        "knowledge_time_ns": 1_789_824_600_000_250_000,
+        "event_time_ns": event_ns,
+        "receive_time_ns": event_ns + _LAG_NS,
+        "knowledge_time_ns": event_ns + _LAG_NS,
         "strategy_version": "s1",
         "risk_policy_version": "r1",
         "payload": "{}",
