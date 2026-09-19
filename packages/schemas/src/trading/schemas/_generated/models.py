@@ -24,6 +24,7 @@ __all__ = [
     "ExecutionOrderEvent",
     "ExecutionOrderIntent",
     "ExecutionPosition",
+    "FeaturesValue",
     "NormalizedBar",
     "NormalizedQuote",
     "NormalizedTrade",
@@ -214,6 +215,36 @@ class ExecutionPosition(BaseModel):
     """Realized PnL. Marked separately from unrealized (§18)."""
     unrealized_pnl_nano: NanoDollars
     """Unrealized PnL at the causal mark."""
+
+
+class FeaturesValue(BaseModel):
+    """One feature's value for one instrument at one decision time (§12).
+
+    Contract ``features.value`` v1 (provisional).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event_time: TimestampNs
+    """Timestamp assigned by the originating venue or source (§6)."""
+    receive_time: TimestampNs
+    """When the gateway received the message (§6). Used for latency and stale-feed detection."""
+    process_time: TimestampNs
+    """When normalization completed (§6). Absent from raw records, which have not been normalized yet."""
+    knowledge_time: TimestampNs
+    """Earliest time the system could have known this value (§6). The field point-in-time correctness rests on: every feature join is bounded by it, and it is never copied from a vendor field (D1)."""
+    revision_time: TimestampNs | None
+    """When a correction or restatement arrived (§6), or null if this record has never been revised."""
+    feature_id: str
+    """Registry identifier."""
+    feature_version: int
+    """Features are immutable and versioned; a changed definition is a new version, never an edit to an existing one."""
+    instrument_id: InstrumentId
+    """Instrument."""
+    decision_time: TimestampNs
+    """The clock instant this value is for. Composition is only legal where a value's knowledge_time is at or before the consumer's decision_time (§12)."""
+    value: float | None
+    """Null where the feature's missing policy yields no value. A float because a feature is a statistic, never money."""
 
 
 class NormalizedBar(BaseModel):

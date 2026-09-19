@@ -38,6 +38,12 @@
       "maturity": "frozen",
       "version": 1
     },
+    "features.value": {
+      "canonical": "contract=features.value\nversion=1\nmaturity=provisional\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:feature_id:text:required:unit=:codeset=\nfield=006:feature_version:count:required:unit=:codeset=\nfield=007:instrument_id:instrument_id:required:unit=:codeset=\nfield=008:decision_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=009:value:ratio:nullable:unit=:codeset=\n",
+      "hash": "31aed832532d9802987f58b89ac53c1256bbbbf59fe444fe5fcaa31ccb1eec1e",
+      "maturity": "provisional",
+      "version": 1
+    },
     "normalized.bar": {
       "canonical": "contract=normalized.bar\nversion=1\nmaturity=frozen\ntime_group=core\nfield=000:event_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=001:receive_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=002:process_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=003:knowledge_time:timestamp_ns:required:unit=ns_utc:codeset=\nfield=004:revision_time:timestamp_ns:nullable:unit=ns_utc:codeset=\nfield=005:source_rank:count:required:unit=:codeset=\nfield=006:vendor_sequence:sequence:required:unit=:codeset=\nfield=007:venue_sequence:sequence:required:unit=:codeset=\nfield=008:ingest_index:sequence:required:unit=:codeset=\nfield=009:raw_partition_id:text:required:unit=:codeset=\nfield=010:event_time_source:code:required:unit=:codeset=event_time_source_v1\nfield=011:instrument_id:instrument_id:required:unit=:codeset=\nfield=012:window_ns:sequence:required:unit=:codeset=\nfield=013:open_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=014:high_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=015:low_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=016:close_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=017:volume_shares:shares:required:unit=share:codeset=\nfield=018:vwap_nano:nano_dollars:required:unit=nanodollar:codeset=\nfield=019:trade_count:count:required:unit=:codeset=\nfield=020:is_complete:bool:required:unit=:codeset=\n",
       "hash": "e60726ec66eb2c9b54017a2626c60363334de0f8d552a0cd4ee7522c073b48af",
