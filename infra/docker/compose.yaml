@@ -17,8 +17,13 @@ services:
       POSTGRES_USER: research
       POSTGRES_PASSWORD: research
       POSTGRES_DB: trading_research
-      # Deterministic collation: index and ORDER BY results must not depend on
-      # the host locale.
+          # UTF8 encoding with C collation. These are separate settings and
+          # conflating them is a real hazard: LANG=C alone makes initdb choose
+          # SQL_ASCII, which is not an encoding but the absence of one -- it
+          # accepts any byte sequence unvalidated, so text written as UTF-8 can
+          # come back mojibake. C collation is what we actually want, for sort
+          # order that does not depend on the host's locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
       LANG: C
       LC_ALL: C
     command: >

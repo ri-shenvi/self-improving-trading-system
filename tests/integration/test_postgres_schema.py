@@ -46,6 +46,37 @@ def migrated(connection: psycopg.Connection[Any]) -> psycopg.Connection[Any]:
     return connection
 
 
+class TestEncoding:
+    """The cluster must be UTF8 with C collation -- both, not one or the other."""
+
+    def test_encoding_is_utf8(self, connection: psycopg.Connection[Any]) -> None:
+        """SQL_ASCII is not an encoding, it is the absence of one.
+
+        It accepts any byte sequence without validation, so UTF-8 text written
+        through it can come back mojibake. It is also what initdb silently picks
+        when the locale is C and no encoding is given -- which is how the first
+        real run of this job failed on a section sign in a SQL comment.
+        """
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT pg_encoding_to_char(encoding) FROM pg_database "
+                "WHERE datname = current_database()"
+            )
+            assert _one(cur)[0] == "UTF8"
+
+    def test_collation_is_c(self, connection: psycopg.Connection[Any]) -> None:
+        """Sort order must not depend on the host's locale."""
+        with connection.cursor() as cur:
+            cur.execute("SELECT datcollate FROM pg_database WHERE datname = current_database()")
+            assert _one(cur)[0] in {"C", "C.UTF-8", "POSIX"}
+
+    def test_non_ascii_survives_a_round_trip(self, connection: psycopg.Connection[Any]) -> None:
+        """The DDL itself contains section references; so will strategy names."""
+        with connection.cursor() as cur:
+            cur.execute("SELECT %s::text", ("§9 — naïve café",))
+            assert _one(cur)[0] == "§9 — naïve café"
+
+
 class TestApplication:
     def test_migrations_apply(self, connection: psycopg.Connection[Any]) -> None:
         with connection.cursor() as cur:
